@@ -50,11 +50,14 @@ export const Tank: React.FC<ExtendedTankData> = ({
 
       {/* Turret (separate from tank body with smooth rotation) */}
       <div
-        className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75"
+        className={`absolute transform -translate-x-1/2 -translate-y-1/2 ${
+          isPlayer ? 'transition-transform duration-75 ease-out' : 'transition-transform duration-150'
+        }`}
         style={{
           left: '0px',
           top: '0px',
           transform: `translate(-50%, -50%) rotate(${actualTurretRotation}deg)`,
+          willChange: 'transform',
         }}
       >
         {/* Tank barrel with better positioning */}
@@ -122,15 +125,17 @@ export const Tank: React.FC<ExtendedTankData> = ({
         </div>
       )}
 
-      {/* Aiming crosshair for player */}
+      {/* Enhanced aiming line for player that shows turret direction */}
       {isPlayer && (
         <div className="absolute pointer-events-none">
           <div
-            className="absolute w-0.5 h-8 bg-cyan-400/60 opacity-50"
+            className="absolute w-0.5 h-12 bg-cyan-400/40 opacity-60"
             style={{
-              left: '24px',
-              top: '-4px',
+              left: '20px',
+              top: '-6px',
               transformOrigin: '0 center',
+              transform: `rotate(${actualTurretRotation - rotation}deg)`,
+              transition: 'transform 75ms ease-out',
             }}
           ></div>
         </div>

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { TankData, ProjectileData, ParticleData } from './GameArena';
 import { PowerUpData } from './PowerUp';
@@ -57,11 +56,11 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     { x: 400, y: 520 },
   ];
 
-  // Handle mouse movement for turret aiming
+  // Handle mouse movement for turret aiming with improved responsiveness
   const handleMouseMove = (mouseX: number, mouseY: number) => {
     mousePosition.current = { x: mouseX, y: mouseY };
     
-    // Update player tank turret rotation
+    // Update player tank turret rotation immediately for better responsiveness
     setTanks(prevTanks => prevTanks.map(tank => {
       if (!tank.isPlayer || tank.isRespawning) return tank;
       
@@ -69,7 +68,12 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
       const dy = mouseY - tank.y;
       const turretRotation = (Math.atan2(dy, dx) * 180) / Math.PI;
       
-      return { ...tank, turretRotation };
+      // Only update if there's a meaningful change to avoid unnecessary re-renders
+      if (Math.abs((tank.turretRotation || 0) - turretRotation) > 0.5) {
+        return { ...tank, turretRotation };
+      }
+      
+      return tank;
     }));
   };
 
