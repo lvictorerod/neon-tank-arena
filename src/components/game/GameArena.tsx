@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Tank } from './Tank';
 import { Projectile } from './Projectile';
 import { GameHUD } from './GameHUD';
 import { ParticleSystem } from './ParticleSystem';
+import { Map } from './Map';
 import { useToast } from '@/hooks/use-toast';
 
 interface GameArenaProps {
@@ -509,33 +509,29 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
       <div className="flex justify-center mt-4">
         <div
           ref={arenaRef}
-          className={`relative w-[${ARENA_WIDTH}px] h-[${ARENA_HEIGHT}px] bg-black/60 border-2 border-cyan-500/50 rounded-lg overflow-hidden shadow-2xl shadow-cyan-500/20 ${gameActive ? 'cursor-crosshair' : 'cursor-default'}`}
+          className={`relative w-[${ARENA_WIDTH}px] h-[${ARENA_HEIGHT}px] rounded-lg overflow-hidden shadow-2xl shadow-cyan-500/20 ${gameActive ? 'cursor-crosshair' : 'cursor-default'}`}
           onClick={handleArenaClick}
         >
-          {/* Grid pattern overlay */}
-          <div className="absolute inset-0 opacity-10">
-            <svg width="100%" height="100%">
-              <defs>
-                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="cyan" strokeWidth="1"/>
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#grid)" />
-            </svg>
-          </div>
+          {/* Map background */}
+          <Map width={ARENA_WIDTH} height={ARENA_HEIGHT} />
 
           {/* Static obstacles */}
           {obstacles.map((obstacle, index) => (
             <div
               key={index}
-              className="absolute bg-gray-600 border border-gray-400 rounded-sm shadow-lg"
+              className="absolute bg-gradient-to-br from-gray-500 to-gray-700 border border-gray-400 rounded-sm shadow-lg z-10"
               style={{
                 left: `${obstacle.x}px`,
                 top: `${obstacle.y}px`,
                 width: `${obstacle.width}px`,
                 height: `${obstacle.height}px`,
               }}
-            />
+            >
+              {/* Obstacle details */}
+              <div className="absolute inset-1 bg-gradient-to-br from-gray-400 to-gray-600 rounded-sm"></div>
+              <div className="absolute top-1 left-1 w-2 h-2 bg-gray-300 rounded-sm"></div>
+              <div className="absolute bottom-1 right-1 w-1 h-1 bg-gray-800 rounded-sm"></div>
+            </div>
           ))}
 
           {/* Particles */}
@@ -553,7 +549,7 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
 
           {/* Game over overlay */}
           {!gameActive && (
-            <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
               <div className="text-center">
                 <h2 className="text-4xl font-bold text-cyan-300 mb-4">Game Over!</h2>
                 <p className="text-xl text-white mb-2">Final Score: {score}</p>
