@@ -27,16 +27,17 @@ export const updateTankPhysics = (
     let inputX = 0;
     let inputY = 0;
 
-    if (keysPressed.has('w') || keysPressed.has('arrowup')) {
+    // Check for movement keys - using both WASD and arrow keys
+    if (keysPressed.has('w') || keysPressed.has('W') || keysPressed.has('ArrowUp')) {
       inputY = -1;
     }
-    if (keysPressed.has('s') || keysPressed.has('arrowdown')) {
+    if (keysPressed.has('s') || keysPressed.has('S') || keysPressed.has('ArrowDown')) {
       inputY = 1;
     }
-    if (keysPressed.has('a') || keysPressed.has('arrowleft')) {
+    if (keysPressed.has('a') || keysPressed.has('A') || keysPressed.has('ArrowLeft')) {
       inputX = -1;
     }
-    if (keysPressed.has('d') || keysPressed.has('arrowright')) {
+    if (keysPressed.has('d') || keysPressed.has('D') || keysPressed.has('ArrowRight')) {
       inputX = 1;
     }
 

@@ -108,6 +108,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({
           }
 
           if (tank.isPlayer) {
+            // Pass the current set of keys directly to the physics system
             return updateTankPhysics(tank, keysPressed.current, deltaTime, collisionGrid);
           } else {
             // AI behavior
