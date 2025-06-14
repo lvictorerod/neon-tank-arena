@@ -68,6 +68,7 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
     kills,
     gameTime,
     gameActive,
+    gamePaused,
     keysPressed,
     setTanks,
     setProjectiles,
@@ -75,8 +76,10 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
     setPowerUps,
     setKills,
     setScore,
+    setGamePaused,
     handleShoot,
     collectPowerUp,
+    getSafeSpawnPositions,
     toast,
   } = useGameLogic({
     playerName,
@@ -89,7 +92,7 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
   });
 
   const handleArenaClick = useCallback((e: React.MouseEvent) => {
-    if (!gameActive) return;
+    if (!gameActive || gamePaused) return;
     
     const rect = arenaRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -112,7 +115,19 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
       handleShoot('player');
       triggerShake(3, 150);
     }, 100);
-  }, [tanks, gameActive, handleShoot, setTanks, triggerShake]);
+  }, [tanks, gameActive, gamePaused, handleShoot, setTanks, triggerShake]);
+
+  // Handle pause functionality
+  const handleKeyPress = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape' && gameActive) {
+      setGamePaused(prev => !prev);
+    }
+  }, [gameActive, setGamePaused]);
+
+  React.useEffect(() => {
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [handleKeyPress]);
 
   const playerTank = tanks.find(tank => tank.isPlayer);
 
@@ -120,14 +135,17 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
       <GameControls 
         onShoot={() => {
-          handleShoot('player');
-          triggerShake(2, 100);
+          if (!gamePaused) {
+            handleShoot('player');
+            triggerShake(2, 100);
+          }
         }}
         keysPressed={keysPressed}
       />
       
       <GameLoop
         gameActive={gameActive}
+        gamePaused={gamePaused}
         tanks={tanks}
         projectiles={projectiles}
         powerUps={powerUps}
@@ -142,6 +160,7 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
         onCollectPowerUp={collectPowerUp}
         onToast={toast}
         onScreenShake={triggerShake}
+        getSafeSpawnPositions={getSafeSpawnPositions}
       />
 
       <GameHUD
@@ -150,18 +169,23 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
         score={score}
         kills={kills}
         gameTime={gameTime}
+        gamePaused={gamePaused}
         onBackToMenu={onBackToMenu}
+        onTogglePause={() => setGamePaused(prev => !prev)}
       />
 
       <div className="flex justify-center mt-4">
         <div
           ref={arenaRef}
-          className={`relative bg-black rounded-lg overflow-hidden shadow-2xl shadow-cyan-500/20 ${gameActive ? 'cursor-crosshair' : 'cursor-default'}`}
+          className={`relative bg-black rounded-lg overflow-hidden shadow-2xl shadow-cyan-500/20 ${
+            gameActive && !gamePaused ? 'cursor-crosshair' : 'cursor-default'
+          }`}
           style={{ 
             width: `${ARENA_WIDTH}px`, 
             height: `${ARENA_HEIGHT}px`,
             transform: shake.active ? `translate(${shake.x}px, ${shake.y}px)` : 'none',
             transition: shake.active ? 'none' : 'transform 0.1s ease-out',
+            filter: gamePaused ? 'blur(2px) brightness(0.7)' : 'none',
           }}
           onClick={handleArenaClick}
         >
@@ -212,6 +236,28 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
             ))}
           </div>
 
+          {/* Pause overlay */}
+          {gamePaused && (
+            <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-45">
+              <div className="text-center">
+                <h2 className="text-3xl font-bold text-cyan-300 mb-4">Game Paused</h2>
+                <p className="text-lg text-white mb-4">Press ESC or click Resume to continue</p>
+                <button
+                  onClick={() => setGamePaused(false)}
+                  className="px-6 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-lg transition-colors mr-4"
+                >
+                  Resume Game
+                </button>
+                <button
+                  onClick={onBackToMenu}
+                  className="px-6 py-3 bg-gray-600 hover:bg-gray-500 text-white font-semibold rounded-lg transition-colors"
+                >
+                  Exit to Menu
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Game over overlay - absolute highest */}
           {!gameActive && (
             <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
@@ -232,9 +278,12 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
       </div>
 
       <div className="text-center mt-4 text-gray-300 text-sm">
-        <p>WASD/Arrow Keys for directional movement • Mouse to aim • Click/Space to shoot • Collect power-ups for advantages</p>
+        <p>WASD/Arrow Keys for movement • Mouse to aim • Click/Space to shoot • ESC to pause</p>
         {playerTank?.isRespawning && (
           <p className="text-red-400 font-semibold">Respawning...</p>
+        )}
+        {gamePaused && (
+          <p className="text-yellow-400 font-semibold">Game Paused</p>
         )}
       </div>
     </div>

@@ -3,17 +3,25 @@ import { TankData, ProjectileData, ParticleData } from './GameArena';
 import { PowerUpData } from './PowerUp';
 import { useToast } from '@/hooks/use-toast';
 
-const WEAPON_COOLDOWN = 500;
+const WEAPON_COOLDOWN = 350; // Reduced for better responsiveness
 const POWERUP_SPAWN_INTERVAL = 8000;
 const POWERUP_LIFETIME = 15000;
+const POWERUP_EFFECT_DURATION = 10000; // Power-ups now have limited duration
 
 interface GameLogicProps {
   playerName: string;
   onGameEnd: (score: number, kills: number) => void;
 }
 
+// Enhanced tank interface with power-up timers
+interface EnhancedTankData extends TankData {
+  speedBoostEnd?: number;
+  damageBoostEnd?: number;
+  shieldBoostEnd?: number;
+}
+
 export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
-  const [tanks, setTanks] = useState<TankData[]>([]);
+  const [tanks, setTanks] = useState<EnhancedTankData[]>([]);
   const [projectiles, setProjectiles] = useState<ProjectileData[]>([]);
   const [particles, setParticles] = useState<ParticleData[]>([]);
   const [powerUps, setPowerUps] = useState<PowerUpData[]>([]);
@@ -21,21 +29,36 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
   const [kills, setKills] = useState(0);
   const [gameTime, setGameTime] = useState(300);
   const [gameActive, setGameActive] = useState(true);
+  const [gamePaused, setGamePaused] = useState(false);
   const keysPressed = useRef<Set<string>>(new Set());
   const { toast } = useToast();
 
+  // Robust ID generator
+  const getUID = (() => {
+    let counter = 0;
+    return (prefix: string) => {
+      if (window.crypto?.randomUUID) {
+        return window.crypto.randomUUID();
+      }
+      return `${prefix}_${Date.now()}_${counter++}_${Math.random().toString(36).substr(2, 9)}`;
+    };
+  })();
+
+  // Safe spawn positions that avoid obstacles
+  const getSafeSpawnPositions = () => [
+    { x: 100, y: 80 },
+    { x: 700, y: 520 },
+    { x: 80, y: 300 },
+    { x: 720, y: 300 },
+    { x: 400, y: 80 },
+    { x: 400, y: 520 },
+  ];
+
   // Initialize game
   useEffect(() => {
-    const spawnPositions = [
-      { x: 100, y: 50 },
-      { x: 700, y: 550 },
-      { x: 50, y: 300 },
-      { x: 750, y: 300 },
-      { x: 400, y: 50 },
-      { x: 400, y: 550 },
-    ];
+    const spawnPositions = getSafeSpawnPositions();
 
-    const initialTanks: TankData[] = [
+    const initialTanks: EnhancedTankData[] = [
       {
         id: 'player',
         x: spawnPositions[0].x,
@@ -76,6 +99,51 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     setTanks(initialTanks);
   }, [playerName]);
 
+  // Power-up effect cleanup
+  useEffect(() => {
+    if (!gameActive || gamePaused) return;
+    
+    const effectCleanup = setInterval(() => {
+      const now = Date.now();
+      setTanks(prevTanks => prevTanks.map(tank => {
+        let updated = { ...tank };
+        let hasChanges = false;
+
+        // Remove expired speed boost
+        if (tank.speedBoostEnd && now > tank.speedBoostEnd) {
+          updated.speed = 1;
+          updated.speedBoostEnd = undefined;
+          hasChanges = true;
+        }
+
+        // Remove expired damage boost
+        if (tank.damageBoostEnd && now > tank.damageBoostEnd) {
+          updated.damage = 25;
+          updated.damageBoostEnd = undefined;
+          hasChanges = true;
+        }
+
+        // Remove expired shield boost
+        if (tank.shieldBoostEnd && now > tank.shieldBoostEnd) {
+          updated.shield = 0;
+          updated.shieldBoostEnd = undefined;
+          hasChanges = true;
+        }
+
+        if (hasChanges && tank.isPlayer) {
+          toast({
+            title: "Power-up expired",
+            description: "Enhancement effects have worn off",
+          });
+        }
+
+        return hasChanges ? updated : tank;
+      }));
+    }, 1000);
+
+    return () => clearInterval(effectCleanup);
+  }, [gameActive, gamePaused, toast]);
+
   // Power-up spawning system
   useEffect(() => {
     if (!gameActive) return;
@@ -114,9 +182,9 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     return () => clearInterval(cleanup);
   }, []);
 
-  // Game timer
+  // Game timer with pause support
   useEffect(() => {
-    if (!gameActive) return;
+    if (!gameActive || gamePaused) return;
     
     const timer = setInterval(() => {
       setGameTime((prev) => {
@@ -130,23 +198,24 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [gameActive, score, kills, onGameEnd]);
+  }, [gameActive, gamePaused, score, kills, onGameEnd]);
 
-  // Particle cleanup
+  // Enhanced particle cleanup with object pooling consideration
   useEffect(() => {
     const cleanup = setInterval(() => {
       const now = Date.now();
-      setParticles(prev => prev.filter(particle => now - particle.createdAt < 2000));
-    }, 1000);
+      setParticles(prev => {
+        const activeParticles = prev.filter(particle => now - particle.createdAt < 2000);
+        // Log if we're creating too many particles for performance monitoring
+        if (prev.length > 100) {
+          console.warn(`High particle count: ${prev.length}, cleaned to: ${activeParticles.length}`);
+        }
+        return activeParticles;
+      });
+    }, 500); // More frequent cleanup
 
     return () => clearInterval(cleanup);
   }, []);
-
-  // Helper for unique IDs
-  const getUID = (() => {
-    let counter = 0;
-    return (prefix: string) => (window.crypto?.randomUUID?.() || `${prefix}_${Date.now()}_${counter++}`);
-  })();
 
   const handleShoot = (tankId: string) => {
     const now = Date.now();
@@ -157,18 +226,22 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         return prevTanks;
       }
 
-      const barrelLength = 30;
-      const projectileX = tank.x + Math.cos((tank.rotation * Math.PI) / 180) * barrelLength;
-      const projectileY = tank.y + Math.sin((tank.rotation * Math.PI) / 180) * barrelLength;
+      // Improved projectile spawn position accounting for tank rotation and barrel
+      const barrelLength = 35; // Slightly longer to avoid collision with tank
+      const tankRadius = 12.5; // Half of TANK_SIZE
+      const spawnDistance = tankRadius + barrelLength;
+      
+      const projectileX = tank.x + Math.cos((tank.rotation * Math.PI) / 180) * spawnDistance;
+      const projectileY = tank.y + Math.sin((tank.rotation * Math.PI) / 180) * spawnDistance;
 
       const newProjectile: ProjectileData = {
         id: getUID('proj'),
         x: projectileX,
         y: projectileY,
         rotation: tank.rotation,
-        speed: 400,
+        speed: 450, // Slightly faster for better feel
         ownerId: tank.id,
-        damage: (tank as any).damage || 25,
+        damage: tank.damage || 25,
         createdAt: now,
       };
 
@@ -192,30 +265,35 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     const powerUp = powerUps.find(p => p.id === powerUpId);
     if (!powerUp) return;
 
+    const now = Date.now();
+
     setTanks(prevTanks => prevTanks.map(tank => {
       if (tank.id !== tankId) return tank;
 
-      const enhancedTank = { ...tank } as any;
+      const enhancedTank = { ...tank } as EnhancedTankData;
       
       switch (powerUp.type) {
         case 'health':
           enhancedTank.health = Math.min(tank.maxHealth, tank.health + 50);
           break;
         case 'speed':
-          enhancedTank.speed = Math.min(2, (enhancedTank.speed || 1) + 0.5);
+          enhancedTank.speed = 1.8; // Fixed boost amount
+          enhancedTank.speedBoostEnd = now + POWERUP_EFFECT_DURATION;
           break;
         case 'damage':
-          enhancedTank.damage = Math.min(50, (enhancedTank.damage || 25) + 15);
+          enhancedTank.damage = 40; // Fixed boost amount
+          enhancedTank.damageBoostEnd = now + POWERUP_EFFECT_DURATION;
           break;
         case 'shield':
-          enhancedTank.shield = Math.min(50, (enhancedTank.shield || 0) + 25);
+          enhancedTank.shield = 50; // Fixed shield amount
+          enhancedTank.shieldBoostEnd = now + POWERUP_EFFECT_DURATION;
           break;
       }
 
       if (tank.isPlayer) {
         toast({
           title: "Power-up collected!",
-          description: `${powerUp.type.charAt(0).toUpperCase() + powerUp.type.slice(1)} boost activated`,
+          description: `${powerUp.type.charAt(0).toUpperCase() + powerUp.type.slice(1)} boost activated for ${POWERUP_EFFECT_DURATION/1000}s`,
         });
       }
 
@@ -223,7 +301,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     }));
 
     setPowerUps(prev => prev.filter(p => p.id !== powerUpId));
-    setScore(prev => prev + 25);
+    setScore(prev => prev + 50); // Increased power-up score
   };
 
   return {
@@ -235,6 +313,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     kills,
     gameTime,
     gameActive,
+    gamePaused,
     keysPressed,
     setTanks,
     setProjectiles,
@@ -242,8 +321,10 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     setPowerUps,
     setKills,
     setScore,
+    setGamePaused,
     handleShoot,
     collectPowerUp,
+    getSafeSpawnPositions,
     toast,
   };
 };
