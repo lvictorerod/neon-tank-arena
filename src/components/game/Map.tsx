@@ -8,12 +8,12 @@ interface MapProps {
 
 export const Map: React.FC<MapProps> = ({ width, height }) => {
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div 
+      className="absolute inset-0 z-0"
+      style={{ width: `${width}px`, height: `${height}px` }}
+    >
       {/* Base terrain background */}
-      <div 
-        className="absolute inset-0 bg-gradient-to-br from-green-800 via-green-700 to-green-900"
-        style={{ width: `${width}px`, height: `${height}px` }}
-      >
+      <div className="absolute inset-0 bg-gradient-to-br from-green-800 via-green-700 to-green-900">
         {/* Terrain texture overlay */}
         <div className="absolute inset-0 opacity-30">
           <svg width="100%" height="100%">
@@ -42,14 +42,14 @@ export const Map: React.FC<MapProps> = ({ width, height }) => {
         <div className="absolute bottom-38 left-34 w-6 h-6 bg-gray-500 rounded-sm transform -rotate-12 shadow-md"></div>
 
         {/* Grass patches */}
-        <div className="absolute top-24 left-60 w-12 h-8 bg-green-600 rounded-full opacity-60 blur-xs"></div>
-        <div className="absolute top-48 right-60 w-16 h-10 bg-green-500 rounded-full opacity-50 blur-xs"></div>
-        <div className="absolute bottom-48 left-48 w-14 h-9 bg-green-600 rounded-full opacity-55 blur-xs"></div>
+        <div className="absolute top-24 left-60 w-12 h-8 bg-green-600 rounded-full opacity-60"></div>
+        <div className="absolute top-48 right-60 w-16 h-10 bg-green-500 rounded-full opacity-50"></div>
+        <div className="absolute bottom-48 left-48 w-14 h-9 bg-green-600 rounded-full opacity-55"></div>
 
         {/* Battle scars / craters */}
-        <div className="absolute top-32 left-80 w-16 h-16 bg-black rounded-full opacity-20 blur-sm border-2 border-gray-700/30"></div>
-        <div className="absolute bottom-60 right-80 w-12 h-12 bg-black rounded-full opacity-15 blur-sm border border-gray-600/20"></div>
-        <div className="absolute top-64 left-40 w-10 h-10 bg-black rounded-full opacity-18 blur-sm border border-gray-600/25"></div>
+        <div className="absolute top-32 left-80 w-16 h-16 bg-black rounded-full opacity-20 border-2 border-gray-700/30"></div>
+        <div className="absolute bottom-60 right-80 w-12 h-12 bg-black rounded-full opacity-15 border border-gray-600/20"></div>
+        <div className="absolute top-64 left-40 w-10 h-10 bg-black rounded-full opacity-18 border border-gray-600/25"></div>
 
         {/* Grid pattern overlay for tactical feel */}
         <div className="absolute inset-0 opacity-10">

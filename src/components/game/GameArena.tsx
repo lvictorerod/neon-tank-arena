@@ -138,13 +138,14 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
       <div className="flex justify-center mt-4">
         <div
           ref={arenaRef}
-          className={`relative w-[${ARENA_WIDTH}px] h-[${ARENA_HEIGHT}px] rounded-lg overflow-hidden shadow-2xl shadow-cyan-500/20 ${gameActive ? 'cursor-crosshair' : 'cursor-default'}`}
+          className={`relative bg-black rounded-lg overflow-hidden shadow-2xl shadow-cyan-500/20 ${gameActive ? 'cursor-crosshair' : 'cursor-default'}`}
+          style={{ width: `${ARENA_WIDTH}px`, height: `${ARENA_HEIGHT}px` }}
           onClick={handleArenaClick}
         >
-          {/* Map background */}
+          {/* Map background - lowest layer */}
           <Map width={ARENA_WIDTH} height={ARENA_HEIGHT} />
 
-          {/* Static obstacles */}
+          {/* Static obstacles - above map */}
           {obstacles.map((obstacle, index) => (
             <div
               key={index}
@@ -163,20 +164,26 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
             </div>
           ))}
 
-          {/* Particles */}
-          <ParticleSystem particles={particles} />
+          {/* Particles - above obstacles */}
+          <div className="relative z-20">
+            <ParticleSystem particles={particles} />
+          </div>
 
-          {/* Projectiles */}
-          {projectiles.map((projectile) => (
-            <Projectile key={projectile.id} {...projectile} />
-          ))}
+          {/* Projectiles - above particles */}
+          <div className="relative z-30">
+            {projectiles.map((projectile) => (
+              <Projectile key={projectile.id} {...projectile} />
+            ))}
+          </div>
 
-          {/* Tanks */}
-          {tanks.filter(tank => !tank.isRespawning).map((tank) => (
-            <Tank key={tank.id} {...tank} />
-          ))}
+          {/* Tanks - highest game layer */}
+          <div className="relative z-40">
+            {tanks.filter(tank => !tank.isRespawning).map((tank) => (
+              <Tank key={tank.id} {...tank} />
+            ))}
+          </div>
 
-          {/* Game over overlay */}
+          {/* Game over overlay - absolute highest */}
           {!gameActive && (
             <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50">
               <div className="text-center">
