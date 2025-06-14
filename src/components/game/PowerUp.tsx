@@ -1,11 +1,12 @@
 
 import React from 'react';
+import { PowerUpType } from './systems/PowerUpSystem';
 
 export interface PowerUpData {
   id: string;
   x: number;
   y: number;
-  type: 'health' | 'speed' | 'damage' | 'shield';
+  type: PowerUpType;
   createdAt: number;
 }
 
@@ -22,6 +23,12 @@ export const PowerUp: React.FC<PowerUpProps> = ({ x, y, type }) => {
         return 'bg-gradient-to-br from-red-400 to-red-600 border-red-300';
       case 'shield':
         return 'bg-gradient-to-br from-purple-400 to-purple-600 border-purple-300';
+      case 'rapid_fire':
+        return 'bg-gradient-to-br from-orange-400 to-orange-600 border-orange-300';
+      case 'stealth':
+        return 'bg-gradient-to-br from-gray-400 to-gray-600 border-gray-300';
+      case 'armor_piercing':
+        return 'bg-gradient-to-br from-yellow-400 to-yellow-600 border-yellow-300';
       default:
         return 'bg-gradient-to-br from-gray-400 to-gray-600 border-gray-300';
     }
@@ -37,6 +44,12 @@ export const PowerUp: React.FC<PowerUpProps> = ({ x, y, type }) => {
         return '💥';
       case 'shield':
         return '🛡';
+      case 'rapid_fire':
+        return '🔥';
+      case 'stealth':
+        return '👻';
+      case 'armor_piercing':
+        return '🗡';
       default:
         return '?';
     }
