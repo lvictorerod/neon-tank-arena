@@ -1,14 +1,15 @@
-
 import React, { useRef, useCallback } from 'react';
 import { Tank } from './Tank';
 import { Projectile } from './Projectile';
+import { PowerUp, PowerUpData } from './PowerUp';
 import { GameHUD } from './GameHUD';
-import { ParticleSystem } from './ParticleSystem';
+import { EnhancedParticleSystem } from './EnhancedParticleSystem';
 import { Map } from './Map';
 import { GameControls } from './GameControls';
 import { GameLoop } from './GameLoop';
 import { useGameLogic } from './GameLogic';
-import { obstacles, ARENA_WIDTH, ARENA_HEIGHT } from './CollisionDetection';
+import { useScreenShake } from './ScreenShake';
+import { obstacles, ARENA_WIDTH, ARENA_HEIGHT, checkCollision, TANK_SIZE } from './CollisionDetection';
 
 interface GameArenaProps {
   playerName: string;
@@ -51,11 +52,13 @@ export interface ParticleData {
 
 export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }) => {
   const arenaRef = useRef<HTMLDivElement>(null);
+  const { shake, triggerShake } = useScreenShake();
   
   const {
     tanks,
     projectiles,
     particles,
+    powerUps,
     score,
     kills,
     gameTime,
@@ -64,9 +67,11 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
     setTanks,
     setProjectiles,
     setParticles,
+    setPowerUps,
     setKills,
     setScore,
     handleShoot,
+    collectPowerUp,
     toast,
   } = useGameLogic({
     playerName,
@@ -100,15 +105,19 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
 
     setTimeout(() => {
       handleShoot('player');
+      triggerShake(3, 150);
     }, 100);
-  }, [tanks, gameActive, handleShoot, setTanks]);
+  }, [tanks, gameActive, handleShoot, setTanks, triggerShake]);
 
   const playerTank = tanks.find(tank => tank.isPlayer);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
       <GameControls 
-        onShoot={() => handleShoot('player')}
+        onShoot={() => {
+          handleShoot('player');
+          triggerShake(2, 100);
+        }}
         keysPressed={keysPressed}
       />
       
@@ -116,14 +125,18 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
         gameActive={gameActive}
         tanks={tanks}
         projectiles={projectiles}
+        powerUps={powerUps}
         keysPressed={keysPressed}
         setTanks={setTanks}
         setProjectiles={setProjectiles}
         setParticles={setParticles}
+        setPowerUps={setPowerUps}
         setKills={setKills}
         setScore={setScore}
         onShoot={handleShoot}
+        onCollectPowerUp={collectPowerUp}
         onToast={toast}
+        onScreenShake={triggerShake}
       />
 
       <GameHUD
@@ -139,7 +152,12 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
         <div
           ref={arenaRef}
           className={`relative bg-black rounded-lg overflow-hidden shadow-2xl shadow-cyan-500/20 ${gameActive ? 'cursor-crosshair' : 'cursor-default'}`}
-          style={{ width: `${ARENA_WIDTH}px`, height: `${ARENA_HEIGHT}px` }}
+          style={{ 
+            width: `${ARENA_WIDTH}px`, 
+            height: `${ARENA_HEIGHT}px`,
+            transform: shake.active ? `translate(${shake.x}px, ${shake.y}px)` : 'none',
+            transition: shake.active ? 'none' : 'transform 0.1s ease-out',
+          }}
           onClick={handleArenaClick}
         >
           {/* Map background - lowest layer */}
@@ -157,16 +175,22 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
                 height: `${obstacle.height}px`,
               }}
             >
-              {/* Obstacle details */}
               <div className="absolute inset-1 bg-gradient-to-br from-gray-400 to-gray-600 rounded-sm"></div>
               <div className="absolute top-1 left-1 w-2 h-2 bg-gray-300 rounded-sm"></div>
               <div className="absolute bottom-1 right-1 w-1 h-1 bg-gray-800 rounded-sm"></div>
             </div>
           ))}
 
-          {/* Particles - above obstacles */}
+          {/* Power-ups - above obstacles */}
+          <div className="relative z-15">
+            {powerUps.map((powerUp) => (
+              <PowerUp key={powerUp.id} {...powerUp} />
+            ))}
+          </div>
+
+          {/* Enhanced particles - above power-ups */}
           <div className="relative z-20">
-            <ParticleSystem particles={particles} />
+            <EnhancedParticleSystem particles={particles} />
           </div>
 
           {/* Projectiles - above particles */}
@@ -203,7 +227,7 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
       </div>
 
       <div className="text-center mt-4 text-gray-300 text-sm">
-        <p>WASD/Arrow Keys for directional movement • Mouse to aim • Click/Space to shoot • Use cover to survive</p>
+        <p>WASD/Arrow Keys for directional movement • Mouse to aim • Click/Space to shoot • Collect power-ups for advantages</p>
         {playerTank?.isRespawning && (
           <p className="text-red-400 font-semibold">Respawning...</p>
         )}

@@ -1,9 +1,11 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { TankData, ProjectileData, ParticleData } from './GameArena';
+import { PowerUpData } from './PowerUp';
 import { useToast } from '@/hooks/use-toast';
 
 const WEAPON_COOLDOWN = 500;
+const POWERUP_SPAWN_INTERVAL = 8000;
+const POWERUP_LIFETIME = 15000;
 
 interface GameLogicProps {
   playerName: string;
@@ -14,6 +16,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
   const [tanks, setTanks] = useState<TankData[]>([]);
   const [projectiles, setProjectiles] = useState<ProjectileData[]>([]);
   const [particles, setParticles] = useState<ParticleData[]>([]);
+  const [powerUps, setPowerUps] = useState<PowerUpData[]>([]);
   const [score, setScore] = useState(0);
   const [kills, setKills] = useState(0);
   const [gameTime, setGameTime] = useState(300);
@@ -45,6 +48,9 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         lastShotTime: 0,
         kills: 0,
         isRespawning: false,
+        speed: 1,
+        damage: 25,
+        shield: 0,
       },
       ...Array.from({ length: 3 }, (_, i) => ({
         id: `bot_${i + 1}`,
@@ -58,10 +64,51 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         lastShotTime: 0,
         kills: 0,
         isRespawning: false,
+        speed: 1,
+        damage: 25,
+        shield: 0,
       }))
     ];
     setTanks(initialTanks);
   }, [playerName]);
+
+  // Power-up spawning system
+  useEffect(() => {
+    if (!gameActive) return;
+    
+    const spawnPowerUp = () => {
+      const types: PowerUpData['type'][] = ['health', 'speed', 'damage', 'shield'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      
+      const newPowerUp: PowerUpData = {
+        id: `powerup_${Date.now()}_${Math.random()}`,
+        x: 100 + Math.random() * 600,
+        y: 100 + Math.random() * 400,
+        type,
+        createdAt: Date.now(),
+      };
+      
+      setPowerUps(prev => [...prev, newPowerUp]);
+      
+      toast({
+        title: "Power-up spawned!",
+        description: `A ${type} boost has appeared on the battlefield`,
+      });
+    };
+
+    const powerUpTimer = setInterval(spawnPowerUp, POWERUP_SPAWN_INTERVAL);
+    return () => clearInterval(powerUpTimer);
+  }, [gameActive, toast]);
+
+  // Power-up cleanup
+  useEffect(() => {
+    const cleanup = setInterval(() => {
+      const now = Date.now();
+      setPowerUps(prev => prev.filter(powerUp => now - powerUp.createdAt < POWERUP_LIFETIME));
+    }, 1000);
+
+    return () => clearInterval(cleanup);
+  }, []);
 
   // Game timer
   useEffect(() => {
@@ -111,13 +158,12 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         rotation: tank.rotation,
         speed: 400,
         ownerId: tank.id,
-        damage: 25,
+        damage: (tank as any).damage || 25,
         createdAt: now,
       };
 
       setProjectiles(prev => [...prev, newProjectile]);
 
-      // Add muzzle flash
       setParticles(prev => [...prev, {
         id: `muzzle_${Date.now()}`,
         x: projectileX,
@@ -132,10 +178,49 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     });
   };
 
+  const collectPowerUp = (tankId: string, powerUpId: string) => {
+    const powerUp = powerUps.find(p => p.id === powerUpId);
+    if (!powerUp) return;
+
+    setTanks(prevTanks => prevTanks.map(tank => {
+      if (tank.id !== tankId) return tank;
+
+      const enhancedTank = { ...tank } as any;
+      
+      switch (powerUp.type) {
+        case 'health':
+          enhancedTank.health = Math.min(tank.maxHealth, tank.health + 50);
+          break;
+        case 'speed':
+          enhancedTank.speed = Math.min(2, (enhancedTank.speed || 1) + 0.5);
+          break;
+        case 'damage':
+          enhancedTank.damage = Math.min(50, (enhancedTank.damage || 25) + 15);
+          break;
+        case 'shield':
+          enhancedTank.shield = Math.min(50, (enhancedTank.shield || 0) + 25);
+          break;
+      }
+
+      if (tank.isPlayer) {
+        toast({
+          title: "Power-up collected!",
+          description: `${powerUp.type.charAt(0).toUpperCase() + powerUp.type.slice(1)} boost activated`,
+        });
+      }
+
+      return enhancedTank;
+    }));
+
+    setPowerUps(prev => prev.filter(p => p.id !== powerUpId));
+    setScore(prev => prev + 25);
+  };
+
   return {
     tanks,
     projectiles,
     particles,
+    powerUps,
     score,
     kills,
     gameTime,
@@ -144,9 +229,11 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     setTanks,
     setProjectiles,
     setParticles,
+    setPowerUps,
     setKills,
     setScore,
     handleShoot,
+    collectPowerUp,
     toast,
   };
 };

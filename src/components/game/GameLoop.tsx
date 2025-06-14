@@ -1,6 +1,6 @@
-
 import { useEffect, useRef } from 'react';
 import { TankData, ProjectileData, ParticleData } from './GameArena';
+import { PowerUpData } from './PowerUp';
 import { 
   checkCollision, 
   checkBoundaryCollision, 
@@ -9,10 +9,6 @@ import {
   TANK_SIZE,
   PROJECTILE_SIZE
 } from './CollisionDetection';
-
-const PROJECTILE_LIFETIME = 3000;
-const WEAPON_COOLDOWN = 500;
-const RESPAWN_TIME = 3000;
 
 // Enhanced movement constants
 const TANK_MAX_SPEED = 120;
@@ -24,28 +20,36 @@ interface GameLoopProps {
   gameActive: boolean;
   tanks: TankData[];
   projectiles: ProjectileData[];
+  powerUps: PowerUpData[];
   keysPressed: React.MutableRefObject<Set<string>>;
   setTanks: React.Dispatch<React.SetStateAction<TankData[]>>;
   setProjectiles: React.Dispatch<React.SetStateAction<ProjectileData[]>>;
   setParticles: React.Dispatch<React.SetStateAction<ParticleData[]>>;
+  setPowerUps: React.Dispatch<React.SetStateAction<PowerUpData[]>>;
   setKills: React.Dispatch<React.SetStateAction<number>>;
   setScore: React.Dispatch<React.SetStateAction<number>>;
   onShoot: (tankId: string) => void;
+  onCollectPowerUp: (tankId: string, powerUpId: string) => void;
   onToast: (toast: { title: string; description: string }) => void;
+  onScreenShake: (intensity: number, duration: number) => void;
 }
 
 export const GameLoop: React.FC<GameLoopProps> = ({
   gameActive,
   tanks,
   projectiles,
+  powerUps,
   keysPressed,
   setTanks,
   setProjectiles,
   setParticles,
+  setPowerUps,
   setKills,
   setScore,
   onShoot,
+  onCollectPowerUp,
   onToast,
+  onScreenShake,
 }) => {
   const lastUpdateTime = useRef<number>(Date.now());
   const gameLoopRef = useRef<number>();
@@ -55,10 +59,21 @@ export const GameLoop: React.FC<GameLoopProps> = ({
 
     const gameLoop = () => {
       const now = Date.now();
-      const deltaTime = Math.min((now - lastUpdateTime.current) / 1000, 1/30); // Cap at 30fps
+      const deltaTime = Math.min((now - lastUpdateTime.current) / 1000, 1/30);
       lastUpdateTime.current = now;
 
-      // Update tanks
+      // Check power-up collisions
+      tanks.forEach(tank => {
+        if (tank.isRespawning) return;
+        
+        powerUps.forEach(powerUp => {
+          if (checkCollision(tank.x, tank.y, TANK_SIZE, powerUp.x, powerUp.y, 20)) {
+            onCollectPowerUp(tank.id, powerUp.id);
+          }
+        });
+      });
+
+      // Update tanks with enhanced movement
       setTanks(prevTanks => {
         const updatedTanks = prevTanks.map(tank => {
           if (tank.isRespawning) {
@@ -81,20 +96,20 @@ export const GameLoop: React.FC<GameLoopProps> = ({
             return tank;
           }
 
-          // Initialize velocity if not present
-          const currentVelocityX = (tank as any).velocityX || 0;
-          const currentVelocityY = (tank as any).velocityY || 0;
+          const enhancedTank = tank as any;
+          const speedMultiplier = enhancedTank.speed || 1;
+          const currentVelocityX = enhancedTank.velocityX || 0;
+          const currentVelocityY = enhancedTank.velocityY || 0;
           
           let velocityX = currentVelocityX;
           let velocityY = currentVelocityY;
           let newRotation = tank.rotation;
 
           if (tank.isPlayer) {
-            // Player input handling
+            // Enhanced player input with speed boost
             let inputX = 0;
             let inputY = 0;
 
-            // WASD movement - independent of rotation
             if (keysPressed.current.has('w') || keysPressed.current.has('arrowup')) {
               inputY = -1;
             }
@@ -108,19 +123,19 @@ export const GameLoop: React.FC<GameLoopProps> = ({
               inputX = 1;
             }
 
-            // Normalize diagonal input
             if (inputX !== 0 && inputY !== 0) {
               const normalizer = Math.sqrt(2) / 2;
               inputX *= normalizer;
               inputY *= normalizer;
             }
 
-            // Apply acceleration or deceleration
+            const accelerationRate = TANK_ACCELERATION * speedMultiplier;
+            const maxSpeed = TANK_MAX_SPEED * speedMultiplier;
+
             if (inputX !== 0) {
-              velocityX += inputX * TANK_ACCELERATION * deltaTime;
-              velocityX = Math.max(-TANK_MAX_SPEED, Math.min(TANK_MAX_SPEED, velocityX));
+              velocityX += inputX * accelerationRate * deltaTime;
+              velocityX = Math.max(-maxSpeed, Math.min(maxSpeed, velocityX));
             } else {
-              // Apply deceleration
               if (Math.abs(velocityX) > 5) {
                 const decel = Math.sign(velocityX) * TANK_DECELERATION * deltaTime;
                 velocityX -= decel;
@@ -133,10 +148,9 @@ export const GameLoop: React.FC<GameLoopProps> = ({
             }
 
             if (inputY !== 0) {
-              velocityY += inputY * TANK_ACCELERATION * deltaTime;
-              velocityY = Math.max(-TANK_MAX_SPEED, Math.min(TANK_MAX_SPEED, velocityY));
+              velocityY += inputY * accelerationRate * deltaTime;
+              velocityY = Math.max(-maxSpeed, Math.min(maxSpeed, velocityY));
             } else {
-              // Apply deceleration
               if (Math.abs(velocityY) > 5) {
                 const decel = Math.sign(velocityY) * TANK_DECELERATION * deltaTime;
                 velocityY -= decel;
@@ -149,51 +163,47 @@ export const GameLoop: React.FC<GameLoopProps> = ({
             }
 
           } else {
-            // AI movement with velocity
+            // Enhanced AI with better tactics
             const player = prevTanks.find(t => t.isPlayer && !t.isRespawning);
-            if (player && Math.random() < 0.02) {
+            if (player && Math.random() < 0.03) {
               const dx = player.x - tank.x;
               const dy = player.y - tank.y;
               const distance = Math.sqrt(dx * dx + dy * dy);
               
-              if (distance > 150) {
-                const moveX = (dx / distance) * TANK_ACCELERATION * deltaTime * 0.6;
-                const moveY = (dy / distance) * TANK_ACCELERATION * deltaTime * 0.6;
+              if (distance > 180) {
+                const moveX = (dx / distance) * TANK_ACCELERATION * deltaTime * 0.7;
+                const moveY = (dy / distance) * TANK_ACCELERATION * deltaTime * 0.7;
                 velocityX += moveX;
                 velocityY += moveY;
-              } else if (distance < 100) {
-                const moveX = -(dx / distance) * TANK_ACCELERATION * deltaTime * 0.4;
-                const moveY = -(dy / distance) * TANK_ACCELERATION * deltaTime * 0.4;
+              } else if (distance < 120) {
+                const moveX = -(dx / distance) * TANK_ACCELERATION * deltaTime * 0.5;
+                const moveY = -(dy / distance) * TANK_ACCELERATION * deltaTime * 0.5;
                 velocityX += moveX;
                 velocityY += moveY;
               }
               
-              // Clamp AI velocity
-              velocityX = Math.max(-TANK_MAX_SPEED * 0.7, Math.min(TANK_MAX_SPEED * 0.7, velocityX));
-              velocityY = Math.max(-TANK_MAX_SPEED * 0.7, Math.min(TANK_MAX_SPEED * 0.7, velocityY));
+              velocityX = Math.max(-TANK_MAX_SPEED * 0.8, Math.min(TANK_MAX_SPEED * 0.8, velocityX));
+              velocityY = Math.max(-TANK_MAX_SPEED * 0.8, Math.min(TANK_MAX_SPEED * 0.8, velocityY));
               
-              // AI rotation for aiming
               const targetAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
               let angleDiff = targetAngle - tank.rotation;
               if (angleDiff > 180) angleDiff -= 360;
               if (angleDiff < -180) angleDiff += 360;
               
-              if (Math.abs(angleDiff) > 15) {
-                newRotation += angleDiff > 0 ? TANK_ROTATION_SPEED * deltaTime * 0.8 : -TANK_ROTATION_SPEED * deltaTime * 0.8;
+              if (Math.abs(angleDiff) > 20) {
+                newRotation += angleDiff > 0 ? TANK_ROTATION_SPEED * deltaTime : -TANK_ROTATION_SPEED * deltaTime;
               }
               
-              // AI shooting
-              if (now - tank.lastShotTime > WEAPON_COOLDOWN * 2.5 && 
-                  Math.abs(angleDiff) < 30 && 
-                  distance < 200 && 
-                  Math.random() < 0.04) {
+              if (now - tank.lastShotTime > WEAPON_COOLDOWN * 2 && 
+                  Math.abs(angleDiff) < 25 && 
+                  distance < 250 && 
+                  Math.random() < 0.06) {
                 setTimeout(() => onShoot(tank.id), 0);
               }
             }
             
-            // Apply AI deceleration
-            velocityX *= 0.95;
-            velocityY *= 0.95;
+            velocityX *= 0.94;
+            velocityY *= 0.94;
             if (Math.abs(velocityX) < 5) velocityX = 0;
             if (Math.abs(velocityY) < 5) velocityY = 0;
           }
@@ -271,7 +281,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({
         return updatedTanks;
       });
 
-      // Update projectiles
+      // Enhanced projectile updates with better collision
       setProjectiles(prevProjectiles => {
         const activeProjectiles: ProjectileData[] = [];
         
@@ -295,6 +305,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({
               type: 'explosion',
               createdAt: now,
             }]);
+            onScreenShake(4, 200);
             continue;
           }
 
@@ -317,9 +328,21 @@ export const GameLoop: React.FC<GameLoopProps> = ({
                 createdAt: now,
               }]);
 
+              onScreenShake(6, 300);
+
               return prevTanks.map(tank => {
                 if (tank.id === targetTank.id) {
-                  const newHealth = Math.max(0, tank.health - projectile.damage);
+                  const enhancedTank = tank as any;
+                  let damage = projectile.damage;
+                  
+                  // Apply shield protection
+                  if (enhancedTank.shield && enhancedTank.shield > 0) {
+                    const shieldAbsorbed = Math.min(damage, enhancedTank.shield);
+                    damage -= shieldAbsorbed;
+                    enhancedTank.shield -= shieldAbsorbed;
+                  }
+                  
+                  const newHealth = Math.max(0, tank.health - damage);
                   
                   if (newHealth === 0 && !tank.isRespawning) {
                     const shooter = prevTanks.find(t => t.id === projectile.ownerId);
@@ -333,14 +356,14 @@ export const GameLoop: React.FC<GameLoopProps> = ({
                     }
 
                     return {
-                      ...tank,
+                      ...enhancedTank,
                       health: 0,
                       isRespawning: true,
                       respawnTime: now + RESPAWN_TIME,
                     };
                   }
                   
-                  return { ...tank, health: newHealth };
+                  return { ...enhancedTank, health: newHealth };
                 }
                 return tank;
               });
@@ -371,7 +394,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({
         cancelAnimationFrame(gameLoopRef.current);
       }
     };
-  }, [gameActive, tanks, projectiles, keysPressed, setTanks, setProjectiles, setParticles, setKills, setScore, onShoot, onToast]);
+  }, [gameActive, tanks, projectiles, powerUps, keysPressed, setTanks, setProjectiles, setParticles, setPowerUps, setKills, setScore, onShoot, onCollectPowerUp, onToast, onScreenShake]);
 
   return null;
 };
