@@ -1,8 +1,16 @@
+
 import React from 'react';
 import { TankData } from './GameArena';
 
-export const Tank: React.FC<TankData> = ({ x, y, rotation, health, maxHealth, name, isPlayer, isRespawning }) => {
+interface ExtendedTankData extends TankData {
+  turretRotation?: number;
+}
+
+export const Tank: React.FC<ExtendedTankData> = ({ 
+  x, y, rotation, turretRotation, health, maxHealth, name, isPlayer, isRespawning 
+}) => {
   const healthPercentage = (health / maxHealth) * 100;
+  const actualTurretRotation = turretRotation !== undefined ? turretRotation : rotation;
 
   if (isRespawning) {
     return null; // Don't render respawning tanks
@@ -14,7 +22,6 @@ export const Tank: React.FC<TankData> = ({ x, y, rotation, health, maxHealth, na
       style={{
         left: `${x}px`,
         top: `${y}px`,
-        transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
         zIndex: 10,
         willChange: 'transform',
       }}
@@ -26,21 +33,10 @@ export const Tank: React.FC<TankData> = ({ x, y, rotation, health, maxHealth, na
             ? 'bg-gradient-to-br from-cyan-400 to-cyan-600 border-cyan-300 shadow-lg shadow-cyan-500/50' 
             : 'bg-gradient-to-br from-red-400 to-red-600 border-red-300 shadow-lg shadow-red-500/50'
         }`}
+        style={{
+          transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
+        }}
       >
-        {/* Tank barrel with better positioning */}
-        <div
-          className={`absolute w-7 h-1.5 -right-3 top-1/2 transform -translate-y-1/2 rounded-full shadow-md ${
-            isPlayer ? 'bg-gradient-to-r from-cyan-300 to-cyan-400' : 'bg-gradient-to-r from-red-300 to-red-400'
-          }`}
-        >
-          {/* Barrel tip */}
-          <div
-            className={`absolute -right-1 top-0 w-2 h-1.5 rounded-r-full ${
-              isPlayer ? 'bg-cyan-200' : 'bg-red-200'
-            }`}
-          ></div>
-        </div>
-        
         {/* Tank tracks with better detail */}
         <div className="absolute -left-0.5 -top-1 w-1 h-10 bg-gradient-to-b from-gray-500 to-gray-700 rounded-full shadow-sm"></div>
         <div className="absolute -right-0.5 -top-1 w-1 h-10 bg-gradient-to-b from-gray-500 to-gray-700 rounded-full shadow-sm"></div>
@@ -49,6 +45,47 @@ export const Tank: React.FC<TankData> = ({ x, y, rotation, health, maxHealth, na
         <div className={`absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${
           isPlayer ? 'bg-cyan-200' : 'bg-red-200'
         }`}></div>
+      </div>
+
+      {/* Turret (separate from tank body) */}
+      <div
+        className="absolute transform -translate-x-1/2 -translate-y-1/2"
+        style={{
+          left: '0px',
+          top: '0px',
+          transform: `translate(-50%, -50%) rotate(${actualTurretRotation}deg)`,
+        }}
+      >
+        {/* Tank barrel with better positioning */}
+        <div
+          className={`w-7 h-1.5 rounded-full shadow-md ${
+            isPlayer ? 'bg-gradient-to-r from-cyan-300 to-cyan-400' : 'bg-gradient-to-r from-red-300 to-red-400'
+          }`}
+          style={{
+            transformOrigin: '0 center',
+            marginLeft: '6px', // Offset from tank center
+          }}
+        >
+          {/* Barrel tip */}
+          <div
+            className={`absolute -right-1 top-0 w-2 h-1.5 rounded-r-full ${
+              isPlayer ? 'bg-cyan-200' : 'bg-red-200'
+            }`}
+          ></div>
+        </div>
+
+        {/* Turret base */}
+        <div
+          className={`absolute w-4 h-4 rounded-full border ${
+            isPlayer 
+              ? 'bg-gradient-to-br from-cyan-300 to-cyan-500 border-cyan-200' 
+              : 'bg-gradient-to-br from-red-300 to-red-500 border-red-200'
+          }`}
+          style={{
+            left: '-8px',
+            top: '-8px',
+          }}
+        ></div>
       </div>
 
       {/* Health bar with improved design */}

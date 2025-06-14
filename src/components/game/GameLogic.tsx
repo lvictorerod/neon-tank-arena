@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from 'react';
 import { TankData, ProjectileData, ParticleData } from './GameArena';
 import { PowerUpData } from './PowerUp';
@@ -13,11 +14,12 @@ interface GameLogicProps {
   onGameEnd: (score: number, kills: number) => void;
 }
 
-// Enhanced tank interface with power-up timers
+// Enhanced tank interface with power-up timers and turret rotation
 interface EnhancedTankData extends TankData {
   speedBoostEnd?: number;
   damageBoostEnd?: number;
   shieldBoostEnd?: number;
+  turretRotation?: number;
 }
 
 export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
@@ -31,6 +33,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
   const [gameActive, setGameActive] = useState(true);
   const [gamePaused, setGamePaused] = useState(false);
   const keysPressed = useRef<Set<string>>(new Set());
+  const mousePosition = useRef({ x: 400, y: 300 }); // Default center position
   const { toast } = useToast();
 
   // Robust ID generator
@@ -54,6 +57,22 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     { x: 400, y: 520 },
   ];
 
+  // Handle mouse movement for turret aiming
+  const handleMouseMove = (mouseX: number, mouseY: number) => {
+    mousePosition.current = { x: mouseX, y: mouseY };
+    
+    // Update player tank turret rotation
+    setTanks(prevTanks => prevTanks.map(tank => {
+      if (!tank.isPlayer || tank.isRespawning) return tank;
+      
+      const dx = mouseX - tank.x;
+      const dy = mouseY - tank.y;
+      const turretRotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+      
+      return { ...tank, turretRotation };
+    }));
+  };
+
   // Initialize game
   useEffect(() => {
     const spawnPositions = getSafeSpawnPositions();
@@ -64,6 +83,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         x: spawnPositions[0].x,
         y: spawnPositions[0].y,
         rotation: 0,
+        turretRotation: 0,
         health: 100,
         maxHealth: 100,
         name: playerName,
@@ -82,6 +102,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         x: spawnPositions[i + 1].x,
         y: spawnPositions[i + 1].y,
         rotation: Math.random() * 360,
+        turretRotation: Math.random() * 360,
         health: 100,
         maxHealth: 100,
         name: ['Alpha-7', 'Storm', 'Viper'][i],
@@ -226,19 +247,22 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         return prevTanks;
       }
 
-      // Improved projectile spawn position accounting for tank rotation and barrel
+      // Use turret rotation for projectile direction, fallback to tank rotation
+      const shootingAngle = tank.turretRotation !== undefined ? tank.turretRotation : tank.rotation;
+      
+      // Improved projectile spawn position accounting for turret rotation and barrel
       const barrelLength = 35; // Slightly longer to avoid collision with tank
       const tankRadius = 12.5; // Half of TANK_SIZE
       const spawnDistance = tankRadius + barrelLength;
       
-      const projectileX = tank.x + Math.cos((tank.rotation * Math.PI) / 180) * spawnDistance;
-      const projectileY = tank.y + Math.sin((tank.rotation * Math.PI) / 180) * spawnDistance;
+      const projectileX = tank.x + Math.cos((shootingAngle * Math.PI) / 180) * spawnDistance;
+      const projectileY = tank.y + Math.sin((shootingAngle * Math.PI) / 180) * spawnDistance;
 
       const newProjectile: ProjectileData = {
         id: getUID('proj'),
         x: projectileX,
         y: projectileY,
-        rotation: tank.rotation,
+        rotation: shootingAngle,
         speed: 450, // Slightly faster for better feel
         ownerId: tank.id,
         damage: tank.damage || 25,
@@ -325,6 +349,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     handleShoot,
     collectPowerUp,
     getSafeSpawnPositions,
+    handleMouseMove,
     toast,
   };
 };

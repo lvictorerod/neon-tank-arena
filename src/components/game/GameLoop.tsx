@@ -1,3 +1,4 @@
+
 import { useEffect, useRef } from 'react';
 import { TankData, ProjectileData, ParticleData } from './GameArena';
 import { PowerUpData } from './PowerUp';
@@ -121,6 +122,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({
                 respawnTime: undefined,
                 velocityX: 0,
                 velocityY: 0,
+                turretRotation: tank.isPlayer ? 0 : Math.random() * 360,
               };
             }
             return tank;
@@ -136,7 +138,8 @@ export const GameLoop: React.FC<GameLoopProps> = ({
               ...tank,
               velocityX: aiUpdate.velocityX,
               velocityY: aiUpdate.velocityY,
-              rotation: aiUpdate.rotation
+              rotation: aiUpdate.rotation,
+              turretRotation: aiUpdate.rotation, // AI tanks use same rotation for body and turret
             };
             return updateTankPhysics(updatedTank, new Set(), deltaTime, collisionGrid);
           }
