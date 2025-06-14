@@ -1,5 +1,3 @@
-
-
 import { useEffect, useRef } from 'react';
 import { TankData, ProjectileData, ParticleData } from './GameArena';
 import { PowerUpData } from './PowerUp';
@@ -332,109 +330,125 @@ export const GameLoop: React.FC<GameLoopProps> = ({
         return updatedTanks;
       });
 
-      // Enhanced projectile updates with better collision
-      setProjectiles(prevProjectiles => {
-        const activeProjectiles: ProjectileData[] = [];
-        
-        for (const projectile of prevProjectiles) {
-          if (now - projectile.createdAt >= PROJECTILE_LIFETIME) {
-            continue;
+      // Refactored projectile update logic
+      const projectileHits: {
+        projectile: ProjectileData;
+        tank: TankData;
+        x: number;
+        y: number;
+      }[] = [];
+      const wallHits: { x: number; y: number; type: 'obstacle' | 'boundary' }[] = [];
+
+      const nextProjectiles = projectiles
+        .map(p => {
+          if (now - p.createdAt >= PROJECTILE_LIFETIME) {
+            return null;
           }
 
-          const newX = projectile.x + Math.cos((projectile.rotation * Math.PI) / 180) * projectile.speed * deltaTime;
-          const newY = projectile.y + Math.sin((projectile.rotation * Math.PI) / 180) * projectile.speed * deltaTime;
+          const newX = p.x + Math.cos((p.rotation * Math.PI) / 180) * p.speed * deltaTime;
+          const newY = p.y + Math.sin((p.rotation * Math.PI) / 180) * p.speed * deltaTime;
 
           if (checkBoundaryCollision(newX, newY, PROJECTILE_SIZE)) {
-            continue;
+            wallHits.push({ x: newX, y: newY, type: 'boundary' });
+            return null;
+          }
+    
+          if (checkObstacleCollision(newX, newY, PROJECTILE_SIZE, obstacles)) {
+            wallHits.push({ x: newX, y: newY, type: 'obstacle' });
+            return null;
           }
 
-          if (checkObstacleCollision(newX, newY, PROJECTILE_SIZE, obstacles)) {
+          const hitTank = tanks.find(tank => 
+            !tank.isRespawning &&
+            tank.id !== p.ownerId &&
+            checkCollision(newX, newY, PROJECTILE_SIZE, tank.x, tank.y, TANK_SIZE)
+          );
+    
+          if (hitTank) {
+            projectileHits.push({ projectile: p, tank: hitTank, x: newX, y: newY });
+            return null;
+          }
+    
+          return { ...p, x: newX, y: newY };
+        })
+        .filter((p): p is ProjectileData => p !== null);
+      
+      setProjectiles(nextProjectiles);
+
+      if (wallHits.length > 0) {
+        let maxIntensity = 0;
+        wallHits.forEach(hit => {
             setParticles(prev => [...prev, {
               id: `explosion_${Date.now()}_${Math.random()}`,
-              x: newX,
-              y: newY,
-              type: 'explosion',
-              createdAt: now,
+              x: hit.x, y: hit.y, type: 'explosion', createdAt: now,
             }]);
-            onScreenShake(4, 200);
-            continue;
-          }
-
-          let hitTank = false;
-          setTanks(prevTanks => {
-            const targetTank = prevTanks.find(tank => 
-              !tank.isRespawning &&
-              tank.id !== projectile.ownerId &&
-              checkCollision(newX, newY, PROJECTILE_SIZE, tank.x, tank.y, TANK_SIZE)
-            );
-
-            if (targetTank) {
-              hitTank = true;
-              
-              setParticles(prev => [...prev, {
-                id: `explosion_${Date.now()}_${Math.random()}`,
-                x: newX,
-                y: newY,
-                type: 'explosion',
-                createdAt: now,
-              }]);
-
-              onScreenShake(6, 300);
-
-              return prevTanks.map(tank => {
-                if (tank.id === targetTank.id) {
-                  const enhancedTank = tank as any;
-                  let damage = projectile.damage;
-                  
-                  if (enhancedTank.shield && enhancedTank.shield > 0) {
-                    const shieldAbsorbed = Math.min(damage, enhancedTank.shield);
-                    damage -= shieldAbsorbed;
-                    enhancedTank.shield -= shieldAbsorbed;
-                  }
-                  
-                  const newHealth = Math.max(0, tank.health - damage);
-                  
-                  if (newHealth === 0 && !tank.isRespawning) {
-                    const shooter = prevTanks.find(t => t.id === projectile.ownerId);
-                    if (shooter?.isPlayer) {
-                      setKills(prev => prev + 1);
-                      setScore(prev => prev + 100);
-                      onToast({
-                        title: "Elimination!",
-                        description: `You eliminated ${tank.name}`,
-                      });
-                    }
-
-                    return {
-                      ...enhancedTank,
-                      health: 0,
-                      isRespawning: true,
-                      respawnTime: now + RESPAWN_TIME,
-                      velocityX: 0,
-                      velocityY: 0,
-                    };
-                  }
-                  
-                  return { ...enhancedTank, health: newHealth };
-                }
-                return tank;
-              });
-            }
-
-            return prevTanks;
-          });
-
-          if (!hitTank) {
-            activeProjectiles.push({
-              ...projectile,
-              x: newX,
-              y: newY,
-            });
-          }
+            maxIntensity = Math.max(maxIntensity, hit.type === 'obstacle' ? 4 : 2);
+        });
+        if (maxIntensity > 0) {
+            onScreenShake(maxIntensity, maxIntensity >= 4 ? 200 : 100);
         }
+      }
 
-        return activeProjectiles;
-      });
+      if (projectileHits.length > 0) {
+        const damageMap = new Map<string, { totalDamage: number, lastHitter: ProjectileData }>();
+        
+        projectileHits.forEach(hit => {
+          setParticles(prev => [...prev, {
+            id: `explosion_${Date.now()}_${Math.random()}`,
+            x: hit.x, y: hit.y, type: 'explosion', createdAt: now,
+          }]);
+
+          const entry = damageMap.get(hit.tank.id) || { totalDamage: 0, lastHitter: hit.projectile };
+          entry.totalDamage += hit.projectile.damage;
+          entry.lastHitter = hit.projectile;
+          damageMap.set(hit.tank.id, entry);
+        });
+        
+        onScreenShake(6, 300);
+
+        setTanks(prevTanks => {
+          const updatedTanks = [...prevTanks];
+          damageMap.forEach(({ totalDamage, lastHitter }, tankId) => {
+            const tankIndex = updatedTanks.findIndex(t => t.id === tankId);
+            if (tankIndex === -1) return;
+
+            const tank = updatedTanks[tankIndex];
+            const enhancedTank = { ...tank } as any;
+            
+            if (enhancedTank.shield && enhancedTank.shield > 0) {
+              const shieldAbsorbed = Math.min(totalDamage, enhancedTank.shield);
+              totalDamage -= shieldAbsorbed;
+              enhancedTank.shield -= shieldAbsorbed;
+            }
+    
+            const newHealth = Math.max(0, tank.health - totalDamage);
+            
+            if (newHealth === 0 && !tank.isRespawning) {
+              const shooter = prevTanks.find(t => t.id === lastHitter.ownerId);
+              if (shooter?.isPlayer) {
+                setKills(prev => prev + 1);
+                setScore(prev => prev + 100);
+                onToast({
+                  title: "Elimination!",
+                  description: `You eliminated ${tank.name}`,
+                });
+              }
+    
+              updatedTanks[tankIndex] = {
+                ...enhancedTank,
+                health: 0,
+                isRespawning: true,
+                respawnTime: now + RESPAWN_TIME,
+                velocityX: 0,
+                velocityY: 0,
+              };
+            } else {
+              updatedTanks[tankIndex] = { ...enhancedTank, health: newHealth };
+            }
+          });
+          return updatedTanks;
+        });
+      }
 
       gameLoopRef.current = requestAnimationFrame(gameLoop);
     };
@@ -450,4 +464,3 @@ export const GameLoop: React.FC<GameLoopProps> = ({
 
   return null;
 };
-
