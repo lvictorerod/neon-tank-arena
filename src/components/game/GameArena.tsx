@@ -1,3 +1,4 @@
+
 import React, { useRef, useCallback } from 'react';
 import { Tank } from './Tank';
 import { Projectile } from './Projectile';
@@ -169,7 +170,6 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
         score={score}
         kills={kills}
         gameTime={gameTime}
-        gamePaused={gamePaused}
         onBackToMenu={onBackToMenu}
         onTogglePause={() => setGamePaused(prev => !prev)}
       />
