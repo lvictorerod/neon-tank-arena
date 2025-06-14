@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { TankData } from './GameArena';
 
@@ -11,12 +10,13 @@ export const Tank: React.FC<TankData> = ({ x, y, rotation, health, maxHealth, na
 
   return (
     <div
-      className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-75"
+      className="absolute transform -translate-x-1/2 -translate-y-1/2"
       style={{
         left: `${x}px`,
         top: `${y}px`,
         transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
         zIndex: 10,
+        willChange: 'transform',
       }}
     >
       {/* Tank body with improved design */}

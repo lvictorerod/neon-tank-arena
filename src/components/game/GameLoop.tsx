@@ -1,4 +1,3 @@
-
 import { useEffect, useRef } from 'react';
 import { TankData, ProjectileData, ParticleData } from './GameArena';
 import { PowerUpData } from './PowerUp';
@@ -52,37 +51,48 @@ export const GameLoop: React.FC<GameLoopProps> = ({
 }) => {
   const lastUpdateTime = useRef<number>(0);
   const gameLoopRef = useRef<number>();
+  const frameCount = useRef<number>(0);
 
   useEffect(() => {
-    if (!gameActive || gamePaused) return;
+    if (!gameActive || gamePaused) {
+      lastUpdateTime.current = 0;
+      return;
+    }
 
     const gameLoop = (timestamp: number) => {
-      // Use high-resolution timestamp for better precision
+      // Initialize timing on first frame
       if (lastUpdateTime.current === 0) {
         lastUpdateTime.current = timestamp;
+        gameLoopRef.current = requestAnimationFrame(gameLoop);
+        return;
       }
       
-      const deltaTime = Math.min((timestamp - lastUpdateTime.current) / 1000, 1/60); // Cap at 60fps
+      // Calculate delta time with better precision
+      const rawDelta = (timestamp - lastUpdateTime.current) / 1000;
+      const deltaTime = Math.min(rawDelta, 1/30); // Cap at 30fps minimum
       lastUpdateTime.current = timestamp;
 
-      // Skip frame if delta time is too small (avoid micro-updates)
-      if (deltaTime < 0.001) {
+      // Skip micro-updates that cause jitter
+      if (deltaTime < 0.005) {
         gameLoopRef.current = requestAnimationFrame(gameLoop);
         return;
       }
 
-      // Create collision grid for optimized collision detection (only once per frame)
+      frameCount.current++;
+
+      // Create collision grid once per frame
       const collisionGrid = createCollisionGrid(tanks);
 
-      // Check power-up collisions
+      // Handle power-up collections
       const powerUpCollisions = checkPowerUpCollisions(tanks, powerUps);
       powerUpCollisions.forEach(({ tankId, powerUpId }) => {
         onCollectPowerUp(tankId, powerUpId);
       });
 
-      // Update tank movement and physics
+      // Update tanks with improved physics
       setTanks(prevTanks => {
         return prevTanks.map(tank => {
+          // Handle respawning tanks
           if (tank.isRespawning) {
             if (tank.respawnTime && timestamp > tank.respawnTime) {
               const safePositions = getSafeSpawnPositions ? getSafeSpawnPositions() : [
@@ -90,7 +100,6 @@ export const GameLoop: React.FC<GameLoopProps> = ({
                 { x: 720, y: 300 }, { x: 400, y: 80 }, { x: 400, y: 520 }
               ];
               
-              // Find a safe spawn position away from other tanks
               let spawnPos = safePositions[Math.floor(Math.random() * safePositions.length)];
               for (const pos of safePositions) {
                 const tooClose = prevTanks.some(otherTank => 
@@ -118,10 +127,10 @@ export const GameLoop: React.FC<GameLoopProps> = ({
           }
 
           if (tank.isPlayer) {
-            // Pass the current set of keys directly to the physics system
+            // Direct physics update for player with current keys
             return updateTankPhysics(tank, keysPressed.current, deltaTime, collisionGrid);
           } else {
-            // AI behavior
+            // AI behavior update
             const aiUpdate = updateAIBehavior(tank, prevTanks, deltaTime, onShoot);
             const updatedTank = {
               ...tank,
@@ -134,11 +143,11 @@ export const GameLoop: React.FC<GameLoopProps> = ({
         });
       });
 
-      // Handle projectile collisions and movement
+      // Handle projectiles
       const projectileResults = checkProjectileCollisions(projectiles, tanks, deltaTime);
       setProjectiles(projectileResults.validProjectiles);
 
-      // Process wall hits
+      // Wall hits and projectile hits processing
       if (projectileResults.wallHits.length > 0) {
         const wallParticles = createWallHitParticles(projectileResults.wallHits);
         setParticles(prev => [...prev, ...wallParticles]);
@@ -149,7 +158,6 @@ export const GameLoop: React.FC<GameLoopProps> = ({
         onScreenShake(maxIntensity, maxIntensity >= 4 ? 200 : 100);
       }
 
-      // Process projectile hits
       if (projectileResults.hits.length > 0) {
         const { updatedTanks, particles } = processProjectileHits(
           projectileResults.hits,
