@@ -10,7 +10,8 @@ export const Tank: React.FC<ExtendedTankData> = ({
   x, y, rotation, turretRotation, health, maxHealth, name, isPlayer, isRespawning 
 }) => {
   const healthPercentage = (health / maxHealth) * 100;
-  const actualTurretRotation = turretRotation !== undefined ? turretRotation : rotation;
+  // For AI tanks, use body rotation for turret. For player, use separate turret rotation
+  const actualTurretRotation = isPlayer && turretRotation !== undefined ? turretRotation : rotation;
 
   if (isRespawning) {
     return null; // Don't render respawning tanks
@@ -28,7 +29,7 @@ export const Tank: React.FC<ExtendedTankData> = ({
     >
       {/* Tank body with improved design */}
       <div
-        className={`w-12 h-8 rounded-sm border-2 relative ${
+        className={`w-12 h-8 rounded-sm border-2 relative transition-transform duration-75 ${
           isPlayer 
             ? 'bg-gradient-to-br from-cyan-400 to-cyan-600 border-cyan-300 shadow-lg shadow-cyan-500/50' 
             : 'bg-gradient-to-br from-red-400 to-red-600 border-red-300 shadow-lg shadow-red-500/50'
@@ -47,9 +48,9 @@ export const Tank: React.FC<ExtendedTankData> = ({
         }`}></div>
       </div>
 
-      {/* Turret (separate from tank body) */}
+      {/* Turret (separate from tank body with smooth rotation) */}
       <div
-        className="absolute transform -translate-x-1/2 -translate-y-1/2"
+        className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-transform duration-75"
         style={{
           left: '0px',
           top: '0px',
@@ -58,7 +59,7 @@ export const Tank: React.FC<ExtendedTankData> = ({
       >
         {/* Tank barrel with better positioning */}
         <div
-          className={`w-7 h-1.5 rounded-full shadow-md ${
+          className={`w-7 h-1.5 rounded-full shadow-md transition-all duration-75 ${
             isPlayer ? 'bg-gradient-to-r from-cyan-300 to-cyan-400' : 'bg-gradient-to-r from-red-300 to-red-400'
           }`}
           style={{
@@ -76,7 +77,7 @@ export const Tank: React.FC<ExtendedTankData> = ({
 
         {/* Turret base */}
         <div
-          className={`absolute w-4 h-4 rounded-full border ${
+          className={`absolute w-4 h-4 rounded-full border transition-all duration-75 ${
             isPlayer 
               ? 'bg-gradient-to-br from-cyan-300 to-cyan-500 border-cyan-200' 
               : 'bg-gradient-to-br from-red-300 to-red-500 border-red-200'
@@ -118,6 +119,20 @@ export const Tank: React.FC<ExtendedTankData> = ({
             <div className="w-3 h-3 bg-cyan-400 rounded-full animate-pulse shadow-lg shadow-cyan-400/50"></div>
             <div className="absolute inset-0 w-3 h-3 bg-cyan-300 rounded-full animate-ping opacity-75"></div>
           </div>
+        </div>
+      )}
+
+      {/* Aiming crosshair for player */}
+      {isPlayer && (
+        <div className="absolute pointer-events-none">
+          <div
+            className="absolute w-0.5 h-8 bg-cyan-400/60 opacity-50"
+            style={{
+              left: '24px',
+              top: '-4px',
+              transformOrigin: '0 center',
+            }}
+          ></div>
         </div>
       )}
 
