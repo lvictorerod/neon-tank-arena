@@ -50,18 +50,28 @@ export const GameLoop: React.FC<GameLoopProps> = ({
   onScreenShake,
   getSafeSpawnPositions,
 }) => {
-  const lastUpdateTime = useRef<number>(Date.now());
+  const lastUpdateTime = useRef<number>(0);
   const gameLoopRef = useRef<number>();
 
   useEffect(() => {
     if (!gameActive || gamePaused) return;
 
-    const gameLoop = () => {
-      const now = Date.now();
-      const deltaTime = Math.min((now - lastUpdateTime.current) / 1000, 1/30);
-      lastUpdateTime.current = now;
+    const gameLoop = (timestamp: number) => {
+      // Use high-resolution timestamp for better precision
+      if (lastUpdateTime.current === 0) {
+        lastUpdateTime.current = timestamp;
+      }
+      
+      const deltaTime = Math.min((timestamp - lastUpdateTime.current) / 1000, 1/60); // Cap at 60fps
+      lastUpdateTime.current = timestamp;
 
-      // Create collision grid for optimized collision detection
+      // Skip frame if delta time is too small (avoid micro-updates)
+      if (deltaTime < 0.001) {
+        gameLoopRef.current = requestAnimationFrame(gameLoop);
+        return;
+      }
+
+      // Create collision grid for optimized collision detection (only once per frame)
       const collisionGrid = createCollisionGrid(tanks);
 
       // Check power-up collisions
@@ -74,7 +84,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({
       setTanks(prevTanks => {
         return prevTanks.map(tank => {
           if (tank.isRespawning) {
-            if (tank.respawnTime && now > tank.respawnTime) {
+            if (tank.respawnTime && timestamp > tank.respawnTime) {
               const safePositions = getSafeSpawnPositions ? getSafeSpawnPositions() : [
                 { x: 100, y: 80 }, { x: 700, y: 520 }, { x: 80, y: 300 }, 
                 { x: 720, y: 300 }, { x: 400, y: 80 }, { x: 400, y: 520 }

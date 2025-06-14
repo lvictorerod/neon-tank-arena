@@ -3,11 +3,11 @@ import { TankData } from '../GameArena';
 import { checkBoundaryCollision, checkObstacleCollision, obstacles, TANK_SIZE } from '../CollisionDetection';
 import { CollisionGrid, checkTankCollision } from './CollisionSystem';
 
-const TANK_MAX_SPEED = 140;
-const TANK_ACCELERATION = 350;
-const TANK_DECELERATION = 450;
-const TANK_ROTATION_SPEED = 180;
-const VELOCITY_THRESHOLD = 15;
+const TANK_MAX_SPEED = 180;
+const TANK_ACCELERATION = 400;
+const TANK_DECELERATION = 500;
+const TANK_ROTATION_SPEED = 200;
+const VELOCITY_THRESHOLD = 10;
 
 export const updateTankPhysics = (
   tank: TankData,
@@ -86,7 +86,7 @@ export const updateTankPhysics = (
       while (angleDiff < -180) angleDiff += 360;
       
       // Smooth rotation with speed-based factor
-      if (Math.abs(angleDiff) > 8) {
+      if (Math.abs(angleDiff) > 5) {
         const rotationStep = TANK_ROTATION_SPEED * deltaTime;
         if (Math.abs(angleDiff) < rotationStep) {
           newRotation = targetAngle;
@@ -107,11 +107,11 @@ export const updateTankPhysics = (
   if (checkBoundaryCollision(newX, newY, TANK_SIZE)) {
     if (checkBoundaryCollision(newX, tank.y, TANK_SIZE)) {
       newX = tank.x;
-      finalVelocityX = -currentVelocityX * 0.2;
+      finalVelocityX = -currentVelocityX * 0.1;
     }
     if (checkBoundaryCollision(tank.x, newY, TANK_SIZE)) {
       newY = tank.y;
-      finalVelocityY = -currentVelocityY * 0.2;
+      finalVelocityY = -currentVelocityY * 0.1;
     }
   }
 
@@ -119,11 +119,11 @@ export const updateTankPhysics = (
   if (checkObstacleCollision(newX, newY, TANK_SIZE, obstacles)) {
     if (checkObstacleCollision(newX, tank.y, TANK_SIZE, obstacles)) {
       newX = tank.x;
-      finalVelocityX = -currentVelocityX * 0.1;
+      finalVelocityX = -currentVelocityX * 0.05;
     }
     if (checkObstacleCollision(tank.x, newY, TANK_SIZE, obstacles)) {
       newY = tank.y;
-      finalVelocityY = -currentVelocityY * 0.1;
+      finalVelocityY = -currentVelocityY * 0.05;
     }
   }
 
@@ -136,7 +136,7 @@ export const updateTankPhysics = (
     
     if (distance > 0) {
       // Improved separation
-      const overlap = TANK_SIZE - distance + 1;
+      const overlap = TANK_SIZE - distance + 2;
       const separationX = (dx / distance) * overlap * 0.5;
       const separationY = (dy / distance) * overlap * 0.5;
       
@@ -149,7 +149,7 @@ export const updateTankPhysics = (
       const velocityAlongNormal = relativeVelX * (dx / distance) + relativeVelY * (dy / distance);
       
       if (velocityAlongNormal > 0) {
-        const restitution = 0.3;
+        const restitution = 0.2;
         const impulse = 2 * velocityAlongNormal / 2; // Assuming equal mass
         finalVelocityX = currentVelocityX - impulse * restitution * (dx / distance);
         finalVelocityY = currentVelocityY - impulse * restitution * (dy / distance);
@@ -158,8 +158,8 @@ export const updateTankPhysics = (
   }
 
   // Zero out tiny velocities to prevent jitter
-  if (Math.abs(finalVelocityX) < VELOCITY_THRESHOLD * 0.5) finalVelocityX = 0;
-  if (Math.abs(finalVelocityY) < VELOCITY_THRESHOLD * 0.5) finalVelocityY = 0;
+  if (Math.abs(finalVelocityX) < VELOCITY_THRESHOLD * 0.3) finalVelocityX = 0;
+  if (Math.abs(finalVelocityY) < VELOCITY_THRESHOLD * 0.3) finalVelocityY = 0;
 
   // Normalize rotation
   while (newRotation >= 360) newRotation -= 360;
