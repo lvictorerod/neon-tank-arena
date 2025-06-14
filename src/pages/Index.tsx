@@ -1,12 +1,46 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import React, { useState } from 'react';
+import { MainMenu } from '@/components/game/MainMenu';
+import { GameArena } from '@/components/game/GameArena';
+import { Lobby } from '@/components/game/Lobby';
+
+export type GameState = 'menu' | 'lobby' | 'playing';
 
 const Index = () => {
+  const [gameState, setGameState] = useState<GameState>('menu');
+  const [playerName, setPlayerName] = useState('');
+
+  const handlePlay = (name: string) => {
+    setPlayerName(name);
+    setGameState('lobby');
+  };
+
+  const handleStartGame = () => {
+    setGameState('playing');
+  };
+
+  const handleBackToMenu = () => {
+    setGameState('menu');
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 overflow-hidden">
+      {gameState === 'menu' && (
+        <MainMenu onPlay={handlePlay} />
+      )}
+      {gameState === 'lobby' && (
+        <Lobby 
+          playerName={playerName} 
+          onStartGame={handleStartGame}
+          onBackToMenu={handleBackToMenu}
+        />
+      )}
+      {gameState === 'playing' && (
+        <GameArena 
+          playerName={playerName}
+          onBackToMenu={handleBackToMenu}
+        />
+      )}
     </div>
   );
 };
