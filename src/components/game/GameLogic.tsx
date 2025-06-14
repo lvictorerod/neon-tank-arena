@@ -60,24 +60,36 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
   // Enhanced mouse movement handling with interpolation and throttling
   const handleMouseMove = (mouseX: number, mouseY: number) => {
     const now = performance.now();
-    
+
     // Throttle updates to 60fps for better performance
     if (now - lastTurretUpdate.current < 16) return;
     lastTurretUpdate.current = now;
-    
+
     mousePosition.current = { x: mouseX, y: mouseY };
-    
+
     // Update player tank turret rotation with smooth interpolation
-    setTanks(prevTanks => prevTanks.map(tank => {
-      if (!tank.isPlayer || tank.isRespawning) return tank;
-      
-      const dx = mouseX - tank.x;
-      const dy = mouseY - tank.y;
-      const targetRotation = (Math.atan2(dy, dx) * 180) / Math.PI;
-      
-      // Direct update for more responsive aiming
-      return { ...tank, turretRotation: targetRotation };
-    }));
+    setTanks(prevTanks =>
+      prevTanks.map(tank => {
+        if (!tank.isPlayer || tank.isRespawning) return tank;
+
+        const dx = mouseX - tank.x;
+        const dy = mouseY - tank.y;
+        const targetRotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+        const currentRotation = tank.turretRotation ?? tank.rotation ?? 0;
+
+        // Smooth interpolation, handle angle wrapping
+        let angleDiff = targetRotation - currentRotation;
+        while (angleDiff > 180) angleDiff -= 360;
+        while (angleDiff < -180) angleDiff += 360;
+        const smoothingFactor = 0.38; // 0.3-0.5 is responsive yet smooth
+        const newRotation = currentRotation + (angleDiff * smoothingFactor);
+
+        if (Math.abs(newRotation - currentRotation) > 0.1) {
+          return { ...tank, turretRotation: newRotation };
+        }
+        return tank;
+      })
+    );
   };
 
   // Initialize game
