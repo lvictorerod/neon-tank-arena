@@ -1,4 +1,3 @@
-
 import React, { useRef, useCallback } from 'react';
 import { Tank } from './Tank';
 import { Projectile } from './Projectile';
@@ -171,7 +170,6 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
         kills={kills}
         gameTime={gameTime}
         onBackToMenu={onBackToMenu}
-        onTogglePause={() => setGamePaused(prev => !prev)}
       />
 
       <div className="flex justify-center mt-4">
