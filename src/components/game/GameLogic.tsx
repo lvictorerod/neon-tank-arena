@@ -74,25 +74,9 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
       const dx = mouseX - tank.x;
       const dy = mouseY - tank.y;
       const targetRotation = (Math.atan2(dy, dx) * 180) / Math.PI;
-      const currentRotation = tank.turretRotation || 0;
       
-      // Smooth interpolation for more natural rotation
-      let angleDiff = targetRotation - currentRotation;
-      
-      // Handle angle wrapping for shortest rotation path
-      while (angleDiff > 180) angleDiff -= 360;
-      while (angleDiff < -180) angleDiff += 360;
-      
-      // Apply smooth interpolation (adjust factor for different responsiveness)
-      const smoothingFactor = 0.3;
-      const newRotation = currentRotation + (angleDiff * smoothingFactor);
-      
-      // Only update if there's a meaningful change to avoid unnecessary re-renders
-      if (Math.abs(newRotation - currentRotation) > 0.1) {
-        return { ...tank, turretRotation: newRotation };
-      }
-      
-      return tank;
+      // Direct update for more responsive aiming
+      return { ...tank, turretRotation: targetRotation };
     }));
   };
 
@@ -270,8 +254,10 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         return prevTanks;
       }
 
-      // Use turret rotation for projectile direction, fallback to tank rotation
-      const shootingAngle = tank.turretRotation !== undefined ? tank.turretRotation : tank.rotation;
+      // For player tank, use turret rotation; for AI tanks, use body rotation
+      const shootingAngle = tank.isPlayer && tank.turretRotation !== undefined 
+        ? tank.turretRotation 
+        : tank.rotation;
       
       // Enhanced projectile spawn position with precise barrel positioning
       const barrelLength = 35;
@@ -285,7 +271,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         id: getUID('proj'),
         x: projectileX,
         y: projectileY,
-        rotation: shootingAngle,
+        rotation: shootingAngle, // Use the correct shooting angle
         speed: 450,
         ownerId: tank.id,
         damage: tank.damage || 25,
@@ -294,7 +280,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
 
       setProjectiles(prev => [...prev, newProjectile]);
 
-      // Enhanced muzzle flash particle
+      // Enhanced muzzle flash particle at correct position
       setParticles(prev => [...prev, {
         id: getUID('muzzle'),
         x: projectileX,
