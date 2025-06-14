@@ -79,79 +79,145 @@ export const GameLoop: React.FC<GameLoopProps> = ({
           let newY = tank.y;
           let newRotation = tank.rotation;
 
-          const speed = 120 * (deltaTime / 1000);
-          const rotationSpeed = 180 * (deltaTime / 1000);
+          // Realistic tank movement speeds
+          const speed = 80 * (deltaTime / 1000); // Slower, more realistic
+          const rotationSpeed = 120 * (deltaTime / 1000); // Separate rotation speed
 
           if (tank.isPlayer) {
-            // Player movement
+            // Realistic tank movement - WASD for directional movement, independent of facing
+            let moveX = 0;
+            let moveY = 0;
+
+            // Forward/backward movement
             if (keysPressed.current.has('w') || keysPressed.current.has('arrowup')) {
-              const moveX = Math.cos((tank.rotation * Math.PI) / 180) * speed;
-              const moveY = Math.sin((tank.rotation * Math.PI) / 180) * speed;
-              newX += moveX;
-              newY += moveY;
+              moveY = -speed; // Move up
             }
             if (keysPressed.current.has('s') || keysPressed.current.has('arrowdown')) {
-              const moveX = Math.cos((tank.rotation * Math.PI) / 180) * speed;
-              const moveY = Math.sin((tank.rotation * Math.PI) / 180) * speed;
-              newX -= moveX;
-              newY -= moveY;
+              moveY = speed; // Move down
             }
+
+            // Left/right movement (strafing)
             if (keysPressed.current.has('a') || keysPressed.current.has('arrowleft')) {
-              newRotation -= rotationSpeed;
+              moveX = -speed; // Move left
             }
             if (keysPressed.current.has('d') || keysPressed.current.has('arrowright')) {
-              newRotation += rotationSpeed;
+              moveX = speed; // Move right
             }
+
+            // Apply movement
+            newX += moveX;
+            newY += moveY;
+
+            // Diagonal movement compensation (normalize speed)
+            if (moveX !== 0 && moveY !== 0) {
+              const normalizer = Math.sqrt(2) / 2;
+              newX = tank.x + (moveX * normalizer);
+              newY = tank.y + (moveY * normalizer);
+            }
+
           } else {
-            // Simplified AI behavior
+            // Improved AI behavior with more realistic movement
             const player = prevTanks.find(t => t.isPlayer && !t.isRespawning);
-            if (player && Math.random() < 0.02) {
+            if (player && Math.random() < 0.015) { // Less frequent updates for smoother movement
               const dx = player.x - tank.x;
               const dy = player.y - tank.y;
-              const targetAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
+              const distance = Math.sqrt(dx * dx + dy * dy);
               
+              // AI tries to maintain optimal distance and move more tactically
+              if (distance > 150) {
+                // Move towards player
+                const moveX = (dx / distance) * speed * 0.7;
+                const moveY = (dy / distance) * speed * 0.7;
+                newX += moveX;
+                newY += moveY;
+              } else if (distance < 100) {
+                // Move away from player to maintain distance
+                const moveX = -(dx / distance) * speed * 0.5;
+                const moveY = -(dy / distance) * speed * 0.5;
+                newX += moveX;
+                newY += moveY;
+              }
+              
+              // AI rotation for aiming
+              const targetAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
               let angleDiff = targetAngle - tank.rotation;
               if (angleDiff > 180) angleDiff -= 360;
               if (angleDiff < -180) angleDiff += 360;
               
-              if (Math.abs(angleDiff) > 10) {
-                newRotation += angleDiff > 0 ? rotationSpeed : -rotationSpeed;
+              if (Math.abs(angleDiff) > 15) {
+                newRotation += angleDiff > 0 ? rotationSpeed * 0.8 : -rotationSpeed * 0.8;
               }
               
-              if (Math.random() < 0.1) {
-                newX += Math.cos((tank.rotation * Math.PI) / 180) * speed;
-                newY += Math.sin((tank.rotation * Math.PI) / 180) * speed;
-              }
-              
-              // AI shooting - use setTimeout to avoid render loop
-              if (now - tank.lastShotTime > WEAPON_COOLDOWN * 2 && Math.random() < 0.03) {
+              // AI shooting with better timing
+              if (now - tank.lastShotTime > WEAPON_COOLDOWN * 2.5 && 
+                  Math.abs(angleDiff) < 30 && 
+                  distance < 200 && 
+                  Math.random() < 0.04) {
                 setTimeout(() => onShoot(tank.id), 0);
               }
             }
           }
 
-          // Collision detection
-          if (checkBoundaryCollision(newX, newY, TANK_SIZE) || checkObstacleCollision(newX, newY, TANK_SIZE, obstacles)) {
-            newX = tank.x;
-            newY = tank.y;
+          // Smooth collision detection with slide mechanics
+          let finalX = newX;
+          let finalY = newY;
+
+          // Check boundary collision with sliding
+          if (checkBoundaryCollision(newX, newY, TANK_SIZE)) {
+            // Try sliding along walls
+            if (!checkBoundaryCollision(tank.x, newY, TANK_SIZE)) {
+              finalX = tank.x; // Slide horizontally
+            } else if (!checkBoundaryCollision(newX, tank.y, TANK_SIZE)) {
+              finalY = tank.y; // Slide vertically
+            } else {
+              finalX = tank.x;
+              finalY = tank.y; // Stop completely
+            }
           }
 
-          // Tank-to-tank collision
-          const wouldCollide = prevTanks.some(otherTank => 
+          // Check obstacle collision with sliding
+          if (checkObstacleCollision(finalX, finalY, TANK_SIZE, obstacles)) {
+            // Try sliding around obstacles
+            if (!checkObstacleCollision(tank.x, finalY, TANK_SIZE, obstacles)) {
+              finalX = tank.x; // Slide horizontally
+            } else if (!checkObstacleCollision(finalX, tank.y, TANK_SIZE, obstacles)) {
+              finalY = tank.y; // Slide vertically
+            } else {
+              finalX = tank.x;
+              finalY = tank.y; // Stop completely
+            }
+          }
+
+          // Tank-to-tank collision with better separation
+          const collidingTank = prevTanks.find(otherTank => 
             otherTank.id !== tank.id && 
             !otherTank.isRespawning &&
-            checkCollision(newX, newY, TANK_SIZE, otherTank.x, otherTank.y, TANK_SIZE)
+            checkCollision(finalX, finalY, TANK_SIZE, otherTank.x, otherTank.y, TANK_SIZE)
           );
 
-          if (wouldCollide) {
-            newX = tank.x;
-            newY = tank.y;
+          if (collidingTank) {
+            // Push tanks apart slightly
+            const dx = tank.x - collidingTank.x;
+            const dy = tank.y - collidingTank.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > 0) {
+              const pushDistance = (TANK_SIZE - distance + 2) / 2;
+              const pushX = (dx / distance) * pushDistance;
+              const pushY = (dy / distance) * pushDistance;
+              
+              finalX = tank.x + pushX;
+              finalY = tank.y + pushY;
+            } else {
+              finalX = tank.x;
+              finalY = tank.y;
+            }
           }
 
           return {
             ...tank,
-            x: newX,
-            y: newY,
+            x: finalX,
+            y: finalY,
             rotation: newRotation % 360,
           };
         });

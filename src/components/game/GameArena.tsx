@@ -203,7 +203,7 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
       </div>
 
       <div className="text-center mt-4 text-gray-300 text-sm">
-        <p>WASD/Arrow Keys to move • Mouse to aim • Click/Space to shoot • Use cover to survive</p>
+        <p>WASD/Arrow Keys for directional movement • Mouse to aim • Click/Space to shoot • Use cover to survive</p>
         {playerTank?.isRespawning && (
           <p className="text-red-400 font-semibold">Respawning...</p>
         )}
