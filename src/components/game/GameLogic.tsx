@@ -257,6 +257,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     return () => clearInterval(cleanup);
   }, []);
 
+  // --- SHOOTING LOGIC FIX ---
   const handleShoot = (tankId: string) => {
     const now = Date.now();
 
@@ -266,24 +267,28 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         return prevTanks;
       }
 
-      // For player tank, use turret rotation; for AI tanks, use body rotation
-      const shootingAngle = tank.isPlayer && tank.turretRotation !== undefined 
-        ? tank.turretRotation 
-        : tank.rotation;
-      
-      // Enhanced projectile spawn position with precise barrel positioning
-      const barrelLength = 35;
-      const tankRadius = 12.5;
-      const spawnDistance = tankRadius + barrelLength;
-      
-      const projectileX = tank.x + Math.cos((shootingAngle * Math.PI) / 180) * spawnDistance;
-      const projectileY = tank.y + Math.sin((shootingAngle * Math.PI) / 180) * spawnDistance;
+      // ---- KEY PART: Use turret rotation for everything ----
+      // Get current turret angle (degrees)
+      const turretAngle = tank.isPlayer && (typeof tank.turretRotation === "number")
+        ? tank.turretRotation
+        : tank.rotation; // AI: body == turret
+
+      // SPAWN the projectile at the tip of the barrel (relative to hull/turret composite)
+      // Define the length from tank center to Muzzle (barrel tip)
+      const BARREL_LENGTH = 27;   // visually matches your Tank.tsx, adjust if needed
+      const TANK_RADIUS = 12;     // visually matches your Tank.tsx, adjust if needed
+      const muzzleDistance = TANK_RADIUS + BARREL_LENGTH;
+
+      // Calculate Muzzle (global) X,Y
+      const angleRad = turretAngle * Math.PI / 180;
+      const muzzleX = tank.x + Math.cos(angleRad) * muzzleDistance;
+      const muzzleY = tank.y + Math.sin(angleRad) * muzzleDistance;
 
       const newProjectile: ProjectileData = {
         id: getUID('proj'),
-        x: projectileX,
-        y: projectileY,
-        rotation: shootingAngle, // Use the correct shooting angle
+        x: muzzleX,
+        y: muzzleY,
+        rotation: turretAngle,     // <--- EXACT turret rotation!
         speed: 450,
         ownerId: tank.id,
         damage: tank.damage || 25,
@@ -291,17 +296,16 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
       };
 
       setProjectiles(prev => [...prev, newProjectile]);
-
-      // Enhanced muzzle flash particle at correct position
+      // Add muzzle flash at Muzzle
       setParticles(prev => [...prev, {
         id: getUID('muzzle'),
-        x: projectileX,
-        y: projectileY,
+        x: muzzleX,
+        y: muzzleY,
         type: 'muzzle',
         createdAt: now,
       }]);
 
-      return prevTanks.map(t => 
+      return prevTanks.map(t =>
         t.id === tankId ? { ...t, lastShotTime: now } : t
       );
     });

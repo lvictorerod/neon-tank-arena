@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { TankData } from './GameArena';
 
@@ -16,7 +15,9 @@ export const Tank: React.FC<EnhancedTankData> = ({
 }) => {
   const healthPercentage = (health / maxHealth) * 100;
   // For AI tanks, use body rotation for turret. For player, use separate turret rotation
-  const actualTurretRotation = isPlayer && turretRotation !== undefined ? turretRotation : rotation;
+  const actualTurretRotation = isPlayer && typeof turretRotation === "number"
+    ? turretRotation
+    : rotation;
 
   if (isRespawning) {
     return null;
