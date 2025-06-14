@@ -15,6 +15,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
   gameContainerRef 
 }) => {
   const mousePosition = useRef({ x: 0, y: 0 });
+  const lastMouseUpdate = useRef<number>(0);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -39,12 +40,22 @@ export const GameControls: React.FC<GameControlsProps> = ({
     const handleMouseMove = (e: MouseEvent) => {
       if (!gameContainerRef?.current || !onMouseMove) return;
 
+      const now = performance.now();
+      
+      // Throttle mouse updates for better performance (60fps)
+      if (now - lastMouseUpdate.current < 16) return;
+      lastMouseUpdate.current = now;
+
       const rect = gameContainerRef.current.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       
-      mousePosition.current = { x: mouseX, y: mouseY };
-      onMouseMove(mouseX, mouseY);
+      // Only update if mouse position changed significantly
+      if (Math.abs(mouseX - mousePosition.current.x) > 1 || 
+          Math.abs(mouseY - mousePosition.current.y) > 1) {
+        mousePosition.current = { x: mouseX, y: mouseY };
+        onMouseMove(mouseX, mouseY);
+      }
     };
 
     const handleMouseClick = (e: MouseEvent) => {
@@ -53,13 +64,19 @@ export const GameControls: React.FC<GameControlsProps> = ({
       }
     };
 
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault(); // Prevent right-click context menu
+    };
+
     // Add event listeners
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     
     if (gameContainerRef?.current) {
-      gameContainerRef.current.addEventListener('mousemove', handleMouseMove);
-      gameContainerRef.current.addEventListener('click', handleMouseClick);
+      const container = gameContainerRef.current;
+      container.addEventListener('mousemove', handleMouseMove, { passive: true });
+      container.addEventListener('click', handleMouseClick);
+      container.addEventListener('contextmenu', handleContextMenu);
     }
 
     // Cleanup function
@@ -68,8 +85,10 @@ export const GameControls: React.FC<GameControlsProps> = ({
       window.removeEventListener('keyup', handleKeyUp);
       
       if (gameContainerRef?.current) {
-        gameContainerRef.current.removeEventListener('mousemove', handleMouseMove);
-        gameContainerRef.current.removeEventListener('click', handleMouseClick);
+        const container = gameContainerRef.current;
+        container.removeEventListener('mousemove', handleMouseMove);
+        container.removeEventListener('click', handleMouseClick);
+        container.removeEventListener('contextmenu', handleContextMenu);
       }
     };
   }, [onShoot, keysPressed, onMouseMove, gameContainerRef]);

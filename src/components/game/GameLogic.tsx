@@ -33,6 +33,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
   const [gamePaused, setGamePaused] = useState(false);
   const keysPressed = useRef<Set<string>>(new Set());
   const mousePosition = useRef({ x: 400, y: 300 }); // Default center position
+  const lastTurretUpdate = useRef<number>(0); // Throttle turret updates
   const { toast } = useToast();
 
   // Robust ID generator
@@ -56,21 +57,39 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     { x: 400, y: 520 },
   ];
 
-  // Handle mouse movement for turret aiming with improved responsiveness
+  // Enhanced mouse movement handling with interpolation and throttling
   const handleMouseMove = (mouseX: number, mouseY: number) => {
+    const now = performance.now();
+    
+    // Throttle updates to 60fps for better performance
+    if (now - lastTurretUpdate.current < 16) return;
+    lastTurretUpdate.current = now;
+    
     mousePosition.current = { x: mouseX, y: mouseY };
     
-    // Update player tank turret rotation immediately for better responsiveness
+    // Update player tank turret rotation with smooth interpolation
     setTanks(prevTanks => prevTanks.map(tank => {
       if (!tank.isPlayer || tank.isRespawning) return tank;
       
       const dx = mouseX - tank.x;
       const dy = mouseY - tank.y;
-      const turretRotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const targetRotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const currentRotation = tank.turretRotation || 0;
+      
+      // Smooth interpolation for more natural rotation
+      let angleDiff = targetRotation - currentRotation;
+      
+      // Handle angle wrapping for shortest rotation path
+      while (angleDiff > 180) angleDiff -= 360;
+      while (angleDiff < -180) angleDiff += 360;
+      
+      // Apply smooth interpolation (adjust factor for different responsiveness)
+      const smoothingFactor = 0.3;
+      const newRotation = currentRotation + (angleDiff * smoothingFactor);
       
       // Only update if there's a meaningful change to avoid unnecessary re-renders
-      if (Math.abs((tank.turretRotation || 0) - turretRotation) > 0.5) {
-        return { ...tank, turretRotation };
+      if (Math.abs(newRotation - currentRotation) > 0.1) {
+        return { ...tank, turretRotation: newRotation };
       }
       
       return tank;
@@ -254,9 +273,9 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
       // Use turret rotation for projectile direction, fallback to tank rotation
       const shootingAngle = tank.turretRotation !== undefined ? tank.turretRotation : tank.rotation;
       
-      // Improved projectile spawn position accounting for turret rotation and barrel
-      const barrelLength = 35; // Slightly longer to avoid collision with tank
-      const tankRadius = 12.5; // Half of TANK_SIZE
+      // Enhanced projectile spawn position with precise barrel positioning
+      const barrelLength = 35;
+      const tankRadius = 12.5;
       const spawnDistance = tankRadius + barrelLength;
       
       const projectileX = tank.x + Math.cos((shootingAngle * Math.PI) / 180) * spawnDistance;
@@ -267,7 +286,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         x: projectileX,
         y: projectileY,
         rotation: shootingAngle,
-        speed: 450, // Slightly faster for better feel
+        speed: 450,
         ownerId: tank.id,
         damage: tank.damage || 25,
         createdAt: now,
@@ -275,6 +294,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
 
       setProjectiles(prev => [...prev, newProjectile]);
 
+      // Enhanced muzzle flash particle
       setParticles(prev => [...prev, {
         id: getUID('muzzle'),
         x: projectileX,
