@@ -29,6 +29,11 @@ export interface TankData {
   kills: number;
   isRespawning: boolean;
   respawnTime?: number;
+  velocityX: number;
+  velocityY: number;
+  speed?: number;
+  damage?: number;
+  shield?: number;
 }
 
 export interface ProjectileData {

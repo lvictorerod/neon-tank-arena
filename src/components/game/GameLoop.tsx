@@ -379,7 +379,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({
         let maxIntensity = 0;
         wallHits.forEach(hit => {
             setParticles(prev => [...prev, {
-              id: `explosion_${Date.now()}_${Math.random()}`,
+              id: window.crypto?.randomUUID?.() || `explosion_${Date.now()}_${Math.random()}`,
               x: hit.x, y: hit.y, type: 'explosion', createdAt: now,
             }]);
             maxIntensity = Math.max(maxIntensity, hit.type === 'obstacle' ? 4 : 2);
@@ -394,7 +394,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({
         
         projectileHits.forEach(hit => {
           setParticles(prev => [...prev, {
-            id: `explosion_${Date.now()}_${Math.random()}`,
+            id: window.crypto?.randomUUID?.() || `explosion_${Date.now()}_${Math.random()}`,
             x: hit.x, y: hit.y, type: 'explosion', createdAt: now,
           }]);
 

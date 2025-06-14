@@ -51,6 +51,8 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         speed: 1,
         damage: 25,
         shield: 0,
+        velocityX: 0,
+        velocityY: 0,
       },
       ...Array.from({ length: 3 }, (_, i) => ({
         id: `bot_${i + 1}`,
@@ -67,6 +69,8 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
         speed: 1,
         damage: 25,
         shield: 0,
+        velocityX: 0,
+        velocityY: 0,
       }))
     ];
     setTanks(initialTanks);
@@ -138,9 +142,15 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
     return () => clearInterval(cleanup);
   }, []);
 
+  // Helper for unique IDs
+  const getUID = (() => {
+    let counter = 0;
+    return (prefix: string) => (window.crypto?.randomUUID?.() || `${prefix}_${Date.now()}_${counter++}`);
+  })();
+
   const handleShoot = (tankId: string) => {
     const now = Date.now();
-    
+
     setTanks(prevTanks => {
       const tank = prevTanks.find(t => t.id === tankId);
       if (!tank || tank.isRespawning || now - tank.lastShotTime < WEAPON_COOLDOWN) {
@@ -152,7 +162,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
       const projectileY = tank.y + Math.sin((tank.rotation * Math.PI) / 180) * barrelLength;
 
       const newProjectile: ProjectileData = {
-        id: `proj_${Date.now()}_${Math.random()}`,
+        id: getUID('proj'),
         x: projectileX,
         y: projectileY,
         rotation: tank.rotation,
@@ -165,7 +175,7 @@ export const useGameLogic = ({ playerName, onGameEnd }: GameLogicProps) => {
       setProjectiles(prev => [...prev, newProjectile]);
 
       setParticles(prev => [...prev, {
-        id: `muzzle_${Date.now()}`,
+        id: getUID('muzzle'),
         x: projectileX,
         y: projectileY,
         type: 'muzzle',
