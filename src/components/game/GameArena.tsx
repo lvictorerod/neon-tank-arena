@@ -55,9 +55,10 @@ interface Obstacle {
 const ARENA_WIDTH = 800;
 const ARENA_HEIGHT = 600;
 const TANK_SIZE = 25;
-const PROJECTILE_LIFETIME = 3000; // 3 seconds
-const WEAPON_COOLDOWN = 500; // 500ms
-const RESPAWN_TIME = 3000; // 3 seconds
+const PROJECTILE_LIFETIME = 3000;
+const WEAPON_COOLDOWN = 500;
+const RESPAWN_TIME = 3000;
+const PROJECTILE_SIZE = 5;
 
 export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }) => {
   const arenaRef = useRef<HTMLDivElement>(null);
@@ -66,10 +67,11 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
   const [particles, setParticles] = useState<ParticleData[]>([]);
   const [score, setScore] = useState(0);
   const [kills, setKills] = useState(0);
-  const [gameTime, setGameTime] = useState(300); // 5 minutes
+  const [gameTime, setGameTime] = useState(300);
   const [gameActive, setGameActive] = useState(true);
   const keysPressed = useRef<Set<string>>(new Set());
   const lastUpdateTime = useRef<number>(Date.now());
+  const gameLoopRef = useRef<number>();
   const { toast } = useToast();
 
   // Static obstacles for cover
@@ -81,26 +83,30 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
     { x: 590, y: 150, width: 40, height: 80 },
   ];
 
-  // Collision detection utilities
+  // Optimized collision detection utilities
   const checkCollision = useCallback((x1: number, y1: number, size1: number, x2: number, y2: number, size2: number): boolean => {
-    const distance = Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2);
+    const dx = x1 - x2;
+    const dy = y1 - y2;
+    const distance = Math.sqrt(dx * dx + dy * dy);
     return distance < (size1 + size2) / 2;
   }, []);
 
   const checkObstacleCollision = useCallback((x: number, y: number, size: number): boolean => {
+    const halfSize = size / 2;
     return obstacles.some(obstacle => 
-      x - size/2 < obstacle.x + obstacle.width &&
-      x + size/2 > obstacle.x &&
-      y - size/2 < obstacle.y + obstacle.height &&
-      y + size/2 > obstacle.y
+      x - halfSize < obstacle.x + obstacle.width &&
+      x + halfSize > obstacle.x &&
+      y - halfSize < obstacle.y + obstacle.height &&
+      y + halfSize > obstacle.y
     );
   }, []);
 
   const checkBoundaryCollision = useCallback((x: number, y: number, size: number): boolean => {
-    return x - size/2 < 0 || x + size/2 > ARENA_WIDTH || y - size/2 < 0 || y + size/2 > ARENA_HEIGHT;
+    const halfSize = size / 2;
+    return x - halfSize < 0 || x + halfSize > ARENA_WIDTH || y - halfSize < 0 || y + halfSize > ARENA_HEIGHT;
   }, []);
 
-  // Initialize game with better balanced setup
+  // Initialize game
   useEffect(() => {
     const spawnPositions = [
       { x: 100, y: 50 },
@@ -142,7 +148,7 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
     setTanks(initialTanks);
   }, [playerName]);
 
-  // Game timer with end condition
+  // Game timer
   useEffect(() => {
     if (!gameActive) return;
     
@@ -163,18 +169,56 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
     return () => clearInterval(timer);
   }, [gameActive, score, kills, toast]);
 
-  // Enhanced keyboard input handling
+  // Optimized shoot function
+  const handleShoot = useCallback((tankId: string) => {
+    const now = Date.now();
+    
+    setTanks(prevTanks => {
+      const tank = prevTanks.find(t => t.id === tankId);
+      if (!tank || tank.isRespawning || now - tank.lastShotTime < WEAPON_COOLDOWN) {
+        return prevTanks;
+      }
+
+      const barrelLength = 30;
+      const projectileX = tank.x + Math.cos((tank.rotation * Math.PI) / 180) * barrelLength;
+      const projectileY = tank.y + Math.sin((tank.rotation * Math.PI) / 180) * barrelLength;
+
+      const newProjectile: ProjectileData = {
+        id: `proj_${Date.now()}_${Math.random()}`,
+        x: projectileX,
+        y: projectileY,
+        rotation: tank.rotation,
+        speed: 400,
+        ownerId: tank.id,
+        damage: 25,
+        createdAt: now,
+      };
+
+      setProjectiles(prev => [...prev, newProjectile]);
+
+      // Add muzzle flash
+      setParticles(prev => [...prev, {
+        id: `muzzle_${Date.now()}`,
+        x: projectileX,
+        y: projectileY,
+        type: 'muzzle',
+        createdAt: now,
+      }]);
+
+      return prevTanks.map(t => 
+        t.id === tankId ? { ...t, lastShotTime: now } : t
+      );
+    });
+  }, []);
+
+  // Keyboard input handling
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
       keysPressed.current.add(e.key.toLowerCase());
       
-      // Space bar for shooting
       if (e.key === ' ') {
-        const playerTank = tanks.find(tank => tank.isPlayer && !tank.isRespawning);
-        if (playerTank) {
-          handleShoot(playerTank);
-        }
+        handleShoot('player');
       }
     };
 
@@ -189,22 +233,22 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [tanks]);
+  }, [handleShoot]);
 
-  // Enhanced tank movement with collision detection
+  // Main game loop with optimized updates
   useEffect(() => {
     if (!gameActive) return;
 
-    const updateLoop = setInterval(() => {
+    const gameLoop = () => {
       const now = Date.now();
       const deltaTime = now - lastUpdateTime.current;
       lastUpdateTime.current = now;
 
-      setTanks((prevTanks) =>
-        prevTanks.map((tank) => {
+      // Update tanks
+      setTanks(prevTanks => {
+        const updatedTanks = prevTanks.map(tank => {
           if (tank.isRespawning) {
             if (tank.respawnTime && now > tank.respawnTime) {
-              // Respawn tank
               const spawnPositions = [
                 { x: 100, y: 50 }, { x: 700, y: 550 }, { x: 50, y: 300 }, 
                 { x: 750, y: 300 }, { x: 400, y: 50 }, { x: 400, y: 550 }
@@ -227,8 +271,8 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
           let newY = tank.y;
           let newRotation = tank.rotation;
 
-          const speed = 120 * (deltaTime / 1000); // pixels per second
-          const rotationSpeed = 180 * (deltaTime / 1000); // degrees per second
+          const speed = 120 * (deltaTime / 1000);
+          const rotationSpeed = 180 * (deltaTime / 1000);
 
           if (tank.isPlayer) {
             // Player movement
@@ -251,15 +295,19 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
               newRotation += rotationSpeed;
             }
           } else {
-            // Simple AI behavior
+            // Simplified AI behavior
             const player = prevTanks.find(t => t.isPlayer && !t.isRespawning);
             if (player && Math.random() < 0.02) {
               const dx = player.x - tank.x;
               const dy = player.y - tank.y;
               const targetAngle = (Math.atan2(dy, dx) * 180) / Math.PI;
               
-              if (Math.abs(targetAngle - tank.rotation) > 10) {
-                newRotation += targetAngle > tank.rotation ? rotationSpeed : -rotationSpeed;
+              let angleDiff = targetAngle - tank.rotation;
+              if (angleDiff > 180) angleDiff -= 360;
+              if (angleDiff < -180) angleDiff += 360;
+              
+              if (Math.abs(angleDiff) > 10) {
+                newRotation += angleDiff > 0 ? rotationSpeed : -rotationSpeed;
               }
               
               if (Math.random() < 0.1) {
@@ -267,9 +315,9 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
                 newY += Math.sin((tank.rotation * Math.PI) / 180) * speed;
               }
               
-              // AI shooting
-              if (now - tank.lastShotTime > WEAPON_COOLDOWN * 2 && Math.random() < 0.05) {
-                setTimeout(() => handleShoot(tank), 0);
+              // AI shooting - use setTimeout to avoid render loop
+              if (now - tank.lastShotTime > WEAPON_COOLDOWN * 2 && Math.random() < 0.03) {
+                setTimeout(() => handleShoot(tank.id), 0);
               }
             }
           }
@@ -298,35 +346,54 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
             y: newY,
             rotation: newRotation % 360,
           };
-        })
-      );
-    }, 16); // ~60 FPS
+        });
 
-    return () => clearInterval(updateLoop);
-  }, [gameActive, checkBoundaryCollision, checkObstacleCollision, checkCollision]);
+        return updatedTanks;
+      });
 
-  // Enhanced projectile physics with collision detection
-  useEffect(() => {
-    if (!gameActive) return;
+      // Update projectiles
+      setProjectiles(prevProjectiles => {
+        const activeProjectiles: ProjectileData[] = [];
+        
+        for (const projectile of prevProjectiles) {
+          // Check lifetime
+          if (now - projectile.createdAt >= PROJECTILE_LIFETIME) {
+            continue;
+          }
 
-    const projectileLoop = setInterval(() => {
-      const now = Date.now();
-      
-      setProjectiles((prev) => {
-        const activeProjectiles = prev
-          .filter(projectile => now - projectile.createdAt < PROJECTILE_LIFETIME)
-          .map((projectile) => {
-            const newX = projectile.x + Math.cos((projectile.rotation * Math.PI) / 180) * projectile.speed * 0.016;
-            const newY = projectile.y + Math.sin((projectile.rotation * Math.PI) / 180) * projectile.speed * 0.016;
+          const newX = projectile.x + Math.cos((projectile.rotation * Math.PI) / 180) * projectile.speed * (deltaTime / 1000);
+          const newY = projectile.y + Math.sin((projectile.rotation * Math.PI) / 180) * projectile.speed * (deltaTime / 1000);
 
-            // Check boundary collision
-            if (newX < 0 || newX > ARENA_WIDTH || newY < 0 || newY > ARENA_HEIGHT) {
-              return null;
-            }
+          // Check boundary collision
+          if (checkBoundaryCollision(newX, newY, PROJECTILE_SIZE)) {
+            continue;
+          }
 
-            // Check obstacle collision
-            if (checkObstacleCollision(newX, newY, 5)) {
-              // Create explosion particle
+          // Check obstacle collision
+          if (checkObstacleCollision(newX, newY, PROJECTILE_SIZE)) {
+            setParticles(prev => [...prev, {
+              id: `explosion_${Date.now()}_${Math.random()}`,
+              x: newX,
+              y: newY,
+              type: 'explosion',
+              createdAt: now,
+            }]);
+            continue;
+          }
+
+          // Check tank collision
+          let hitTank = false;
+          setTanks(prevTanks => {
+            const targetTank = prevTanks.find(tank => 
+              !tank.isRespawning &&
+              tank.id !== projectile.ownerId &&
+              checkCollision(newX, newY, PROJECTILE_SIZE, tank.x, tank.y, TANK_SIZE)
+            );
+
+            if (targetTank) {
+              hitTank = true;
+              
+              // Create explosion
               setParticles(prev => [...prev, {
                 id: `explosion_${Date.now()}_${Math.random()}`,
                 x: newX,
@@ -334,24 +401,12 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
                 type: 'explosion',
                 createdAt: now,
               }]);
-              return null;
-            }
 
-            // Check tank collision
-            const hitTank = tanks.find(tank => 
-              !tank.isRespawning &&
-              tank.id !== projectile.ownerId &&
-              checkCollision(newX, newY, 5, tank.x, tank.y, TANK_SIZE)
-            );
-
-            if (hitTank) {
-              // Damage tank
-              setTanks(prevTanks => prevTanks.map(tank => {
-                if (tank.id === hitTank.id) {
+              return prevTanks.map(tank => {
+                if (tank.id === targetTank.id) {
                   const newHealth = Math.max(0, tank.health - projectile.damage);
                   
                   if (newHealth === 0 && !tank.isRespawning) {
-                    // Tank eliminated
                     const shooter = prevTanks.find(t => t.id === projectile.ownerId);
                     if (shooter?.isPlayer) {
                       setKills(prev => prev + 1);
@@ -373,36 +428,37 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
                   return { ...tank, health: newHealth };
                 }
                 return tank;
-              }));
-
-              // Create explosion
-              setParticles(prev => [...prev, {
-                id: `explosion_${Date.now()}_${Math.random()}`,
-                x: newX,
-                y: newY,
-                type: 'explosion',
-                createdAt: now,
-              }]);
-
-              return null;
+              });
             }
 
-            return {
+            return prevTanks;
+          });
+
+          if (!hitTank) {
+            activeProjectiles.push({
               ...projectile,
               x: newX,
               y: newY,
-            };
-          })
-          .filter(Boolean) as ProjectileData[];
+            });
+          }
+        }
 
         return activeProjectiles;
       });
-    }, 16);
 
-    return () => clearInterval(projectileLoop);
-  }, [gameActive, tanks, checkObstacleCollision, checkCollision, toast]);
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
+    };
 
-  // Particle system cleanup
+    gameLoopRef.current = requestAnimationFrame(gameLoop);
+
+    return () => {
+      if (gameLoopRef.current) {
+        cancelAnimationFrame(gameLoopRef.current);
+      }
+    };
+  }, [gameActive, checkBoundaryCollision, checkObstacleCollision, checkCollision, handleShoot, toast]);
+
+  // Particle cleanup
   useEffect(() => {
     const cleanup = setInterval(() => {
       const now = Date.now();
@@ -410,45 +466,6 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
     }, 1000);
 
     return () => clearInterval(cleanup);
-  }, []);
-
-  const handleShoot = useCallback((tank: TankData) => {
-    const now = Date.now();
-    
-    if (now - tank.lastShotTime < WEAPON_COOLDOWN || tank.isRespawning) {
-      return;
-    }
-
-    const barrelLength = 30;
-    const projectileX = tank.x + Math.cos((tank.rotation * Math.PI) / 180) * barrelLength;
-    const projectileY = tank.y + Math.sin((tank.rotation * Math.PI) / 180) * barrelLength;
-
-    const newProjectile: ProjectileData = {
-      id: `proj_${Date.now()}_${Math.random()}`,
-      x: projectileX,
-      y: projectileY,
-      rotation: tank.rotation,
-      speed: 400,
-      ownerId: tank.id,
-      damage: 25,
-      createdAt: now,
-    };
-
-    setProjectiles((prev) => [...prev, newProjectile]);
-
-    // Update tank's last shot time
-    setTanks(prev => prev.map(t => 
-      t.id === tank.id ? { ...t, lastShotTime: now } : t
-    ));
-
-    // Add muzzle flash
-    setParticles((prev) => [...prev, {
-      id: `muzzle_${Date.now()}`,
-      x: projectileX,
-      y: projectileY,
-      type: 'muzzle',
-      createdAt: now,
-    }]);
   }, []);
 
   const handleArenaClick = useCallback((e: React.MouseEvent) => {
@@ -463,20 +480,16 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
     const playerTank = tanks.find((tank) => tank.isPlayer && !tank.isRespawning);
     if (!playerTank) return;
 
-    // Calculate angle to click position
     const dx = clickX - playerTank.x;
     const dy = clickY - playerTank.y;
     const targetRotation = (Math.atan2(dy, dx) * 180) / Math.PI;
 
-    // Update tank rotation toward click
     setTanks(prev => prev.map(tank => 
       tank.isPlayer ? { ...tank, rotation: targetRotation } : tank
     ));
 
-    // Shoot after a brief delay for rotation
     setTimeout(() => {
-      const updatedTank = { ...playerTank, rotation: targetRotation };
-      handleShoot(updatedTank);
+      handleShoot('player');
     }, 100);
   }, [tanks, gameActive, handleShoot]);
 
@@ -511,7 +524,7 @@ export const GameArena: React.FC<GameArenaProps> = ({ playerName, onBackToMenu }
             </svg>
           </div>
 
-          {/* Dynamic obstacles */}
+          {/* Static obstacles */}
           {obstacles.map((obstacle, index) => (
             <div
               key={index}
