@@ -1,3 +1,4 @@
+
 import { useEffect, useRef } from 'react';
 import { TankData, ProjectileData, ParticleData } from './GameArena';
 import { PowerUpData } from './PowerUp';
@@ -9,6 +10,11 @@ import {
   TANK_SIZE,
   PROJECTILE_SIZE
 } from './CollisionDetection';
+
+// Game constants
+const WEAPON_COOLDOWN = 500;
+const PROJECTILE_LIFETIME = 3000;
+const RESPAWN_TIME = 3000;
 
 // Enhanced movement constants
 const TANK_MAX_SPEED = 120;
