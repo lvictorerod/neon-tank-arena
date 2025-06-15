@@ -1,4 +1,3 @@
-
 import { TankData, ProjectileData } from '../GameArena';
 import { PowerUpData } from '../PowerUp';
 
@@ -21,8 +20,13 @@ export interface ProjectileCollisionResult {
   wallHits: WallHit[];
 }
 
+export interface CollisionGrid {
+  grid: Map<string, TankData[]>;
+  GRID_SIZE: number;
+}
+
 // Create a spatial grid for efficient collision detection
-export const createCollisionGrid = (tanks: TankData[]) => {
+export const createCollisionGrid = (tanks: TankData[]): CollisionGrid => {
   const GRID_SIZE = 50;
   const grid = new Map<string, TankData[]>();
   
@@ -40,6 +44,48 @@ export const createCollisionGrid = (tanks: TankData[]) => {
   });
   
   return { grid, GRID_SIZE };
+};
+
+// Check tank collision at specific coordinates
+export const checkTankCollision = (
+  tank: TankData,
+  newX: number,
+  newY: number,
+  collisionGrid: CollisionGrid
+): TankData | undefined => {
+  const { grid, GRID_SIZE } = collisionGrid;
+  
+  // Get grid cells to check (current and adjacent)
+  const gridX = Math.floor(newX / GRID_SIZE);
+  const gridY = Math.floor(newY / GRID_SIZE);
+  
+  const cellsToCheck = [
+    `${gridX},${gridY}`,
+    `${gridX-1},${gridY}`,
+    `${gridX+1},${gridY}`,
+    `${gridX},${gridY-1}`,
+    `${gridX},${gridY+1}`,
+    `${gridX-1},${gridY-1}`,
+    `${gridX+1},${gridY-1}`,
+    `${gridX-1},${gridY+1}`,
+    `${gridX+1},${gridY+1}`
+  ];
+  
+  for (const cellKey of cellsToCheck) {
+    const cellTanks = grid.get(cellKey);
+    if (!cellTanks) continue;
+    
+    for (const otherTank of cellTanks) {
+      if (otherTank.id === tank.id || otherTank.isRespawning) continue;
+      
+      const distance = Math.sqrt((newX - otherTank.x) ** 2 + (newY - otherTank.y) ** 2);
+      if (distance < 40) { // Tank collision radius (20 + 20)
+        return otherTank;
+      }
+    }
+  }
+  
+  return undefined;
 };
 
 // Check projectile collisions with improved movement logic
