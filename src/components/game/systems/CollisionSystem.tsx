@@ -1,30 +1,37 @@
 
 import { TankData, ProjectileData } from '../GameArena';
 import { PowerUpData } from '../PowerUp';
-import { 
-  checkCollision, 
-  checkBoundaryCollision, 
-  checkObstacleCollision, 
-  obstacles,
-  TANK_SIZE,
-  PROJECTILE_SIZE
-} from '../CollisionDetection';
 
-export interface CollisionGrid {
-  grid: Map<string, TankData[]>;
-  cellSize: number;
+export interface ProjectileHit {
+  projectile: ProjectileData;
+  tank: TankData;
+  x: number;
+  y: number;
 }
 
-export const createCollisionGrid = (tanks: TankData[]): CollisionGrid => {
+export interface WallHit {
+  x: number;
+  y: number;
+  type: 'obstacle' | 'boundary';
+}
+
+export interface ProjectileCollisionResult {
+  validProjectiles: ProjectileData[];
+  hits: ProjectileHit[];
+  wallHits: WallHit[];
+}
+
+// Create a spatial grid for efficient collision detection
+export const createCollisionGrid = (tanks: TankData[]) => {
+  const GRID_SIZE = 50;
   const grid = new Map<string, TankData[]>();
-  const cellSize = TANK_SIZE * 2;
   
   tanks.forEach(tank => {
     if (tank.isRespawning) return;
     
-    const cellX = Math.floor(tank.x / cellSize);
-    const cellY = Math.floor(tank.y / cellSize);
-    const key = `${cellX},${cellY}`;
+    const gridX = Math.floor(tank.x / GRID_SIZE);
+    const gridY = Math.floor(tank.y / GRID_SIZE);
+    const key = `${gridX},${gridY}`;
     
     if (!grid.has(key)) {
       grid.set(key, []);
@@ -32,96 +39,116 @@ export const createCollisionGrid = (tanks: TankData[]): CollisionGrid => {
     grid.get(key)!.push(tank);
   });
   
-  return { grid, cellSize };
+  return { grid, GRID_SIZE };
 };
 
-export const checkTankCollision = (
-  tank: TankData, 
-  newX: number, 
-  newY: number, 
-  collisionGrid: CollisionGrid
-): TankData | null => {
-  const { grid, cellSize } = collisionGrid;
-  const cellX = Math.floor(newX / cellSize);
-  const cellY = Math.floor(newY / cellSize);
+// Check projectile collisions with improved movement logic
+export const checkProjectileCollisions = (
+  projectiles: ProjectileData[],
+  tanks: TankData[],
+  deltaTime: number
+): ProjectileCollisionResult => {
+  const ARENA_WIDTH = 800;
+  const ARENA_HEIGHT = 600;
+  const OBSTACLE_ZONES = [
+    { x: 200, y: 150, width: 100, height: 30 },
+    { x: 500, y: 350, width: 100, height: 30 },
+    { x: 350, y: 250, width: 30, height: 100 },
+  ];
   
-  for (let dx = -1; dx <= 1; dx++) {
-    for (let dy = -1; dy <= 1; dy++) {
-      const key = `${cellX + dx},${cellY + dy}`;
-      const cellTanks = grid.get(key) || [];
-      const collidingTank = cellTanks.find(otherTank => 
-        otherTank.id !== tank.id && 
-        !otherTank.isRespawning &&
-        checkCollision(newX, newY, TANK_SIZE, otherTank.x, otherTank.y, TANK_SIZE)
-      );
-      if (collidingTank) return collidingTank;
+  const validProjectiles: ProjectileData[] = [];
+  const hits: ProjectileHit[] = [];
+  const wallHits: WallHit[] = [];
+
+  projectiles.forEach(projectile => {
+    // CRITICAL FIX: Calculate velocity based on projectile's rotation
+    const rotationRad = (projectile.rotation * Math.PI) / 180;
+    const velocityX = Math.cos(rotationRad) * projectile.speed * deltaTime;
+    const velocityY = Math.sin(rotationRad) * projectile.speed * deltaTime;
+    
+    // Update projectile position using calculated velocity
+    const newX = projectile.x + velocityX;
+    const newY = projectile.y + velocityY;
+
+    // Check arena boundaries
+    if (newX < 10 || newX > ARENA_WIDTH - 10 || newY < 10 || newY > ARENA_HEIGHT - 10) {
+      wallHits.push({
+        x: Math.max(10, Math.min(ARENA_WIDTH - 10, newX)),
+        y: Math.max(10, Math.min(ARENA_HEIGHT - 10, newY)),
+        type: 'boundary'
+      });
+      return; // Projectile hits boundary
     }
-  }
-  return null;
+
+    // Check obstacle collisions
+    let hitObstacle = false;
+    for (const obstacle of OBSTACLE_ZONES) {
+      if (newX >= obstacle.x && newX <= obstacle.x + obstacle.width &&
+          newY >= obstacle.y && newY <= obstacle.y + obstacle.height) {
+        wallHits.push({
+          x: newX,
+          y: newY,
+          type: 'obstacle'
+        });
+        hitObstacle = true;
+        break;
+      }
+    }
+    if (hitObstacle) return;
+
+    // Check tank collisions
+    let hitTank = false;
+    for (const tank of tanks) {
+      if (tank.isRespawning || tank.id === projectile.ownerId) continue;
+      
+      const distance = Math.sqrt((newX - tank.x) ** 2 + (newY - tank.y) ** 2);
+      if (distance < 20) { // Tank collision radius
+        hits.push({
+          projectile,
+          tank,
+          x: newX,
+          y: newY,
+        });
+        hitTank = true;
+        break;
+      }
+    }
+    if (hitTank) return;
+
+    // Check projectile lifetime (remove old projectiles)
+    const now = Date.now();
+    if (now - projectile.createdAt > 3000) { // 3 second lifetime
+      return;
+    }
+
+    // Projectile is still valid, update its position
+    validProjectiles.push({
+      ...projectile,
+      x: newX,
+      y: newY,
+    });
+  });
+
+  return { validProjectiles, hits, wallHits };
 };
 
-export const checkPowerUpCollisions = (tanks: TankData[], powerUps: PowerUpData[]): Array<{ tankId: string; powerUpId: string }> => {
+// Power-up collision detection
+export const checkPowerUpCollisions = (
+  tanks: TankData[],
+  powerUps: PowerUpData[]
+): Array<{ tankId: string; powerUpId: string }> => {
   const collisions: Array<{ tankId: string; powerUpId: string }> = [];
   
   tanks.forEach(tank => {
     if (tank.isRespawning) return;
     
     powerUps.forEach(powerUp => {
-      if (checkCollision(tank.x, tank.y, TANK_SIZE, powerUp.x, powerUp.y, 20)) {
+      const distance = Math.sqrt((tank.x - powerUp.x) ** 2 + (tank.y - powerUp.y) ** 2);
+      if (distance < 25) { // Collection radius
         collisions.push({ tankId: tank.id, powerUpId: powerUp.id });
       }
     });
   });
   
   return collisions;
-};
-
-export const checkProjectileCollisions = (
-  projectiles: ProjectileData[], 
-  tanks: TankData[], 
-  deltaTime: number
-): {
-  hits: Array<{ projectile: ProjectileData; tank: TankData; x: number; y: number }>;
-  wallHits: Array<{ x: number; y: number; type: 'obstacle' | 'boundary' }>;
-  validProjectiles: ProjectileData[];
-} => {
-  const hits: Array<{ projectile: ProjectileData; tank: TankData; x: number; y: number }> = [];
-  const wallHits: Array<{ x: number; y: number; type: 'obstacle' | 'boundary' }> = [];
-  const validProjectiles: ProjectileData[] = [];
-  const now = Date.now();
-  const PROJECTILE_LIFETIME = 3000;
-
-  projectiles.forEach(p => {
-    if (now - p.createdAt >= PROJECTILE_LIFETIME) {
-      return; // Projectile expired
-    }
-
-    const newX = p.x + Math.cos((p.rotation * Math.PI) / 180) * p.speed * deltaTime;
-    const newY = p.y + Math.sin((p.rotation * Math.PI) / 180) * p.speed * deltaTime;
-
-    if (checkBoundaryCollision(newX, newY, PROJECTILE_SIZE)) {
-      wallHits.push({ x: newX, y: newY, type: 'boundary' });
-      return;
-    }
-
-    if (checkObstacleCollision(newX, newY, PROJECTILE_SIZE, obstacles)) {
-      wallHits.push({ x: newX, y: newY, type: 'obstacle' });
-      return;
-    }
-
-    const hitTank = tanks.find(tank => 
-      !tank.isRespawning &&
-      tank.id !== p.ownerId &&
-      checkCollision(newX, newY, PROJECTILE_SIZE, tank.x, tank.y, TANK_SIZE)
-    );
-
-    if (hitTank) {
-      hits.push({ projectile: p, tank: hitTank, x: newX, y: newY });
-      return;
-    }
-
-    validProjectiles.push({ ...p, x: newX, y: newY });
-  });
-
-  return { hits, wallHits, validProjectiles };
 };
