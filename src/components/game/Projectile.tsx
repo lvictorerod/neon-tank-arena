@@ -5,12 +5,13 @@ import { ProjectileData } from './GameArena';
 export const Projectile: React.FC<ProjectileData> = ({ x, y, rotation }) => {
   return (
     <div
-      className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+      className="absolute pointer-events-none"
       style={{
         left: `${x}px`,
         top: `${y}px`,
         transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
         zIndex: 5,
+        willChange: 'transform',
       }}
     >
       {/* Enhanced projectile with better visual effects */}

@@ -1,3 +1,4 @@
+
 import { TankData, ProjectileData } from '../GameArena';
 import { PowerUpData } from '../PowerUp';
 
@@ -111,6 +112,11 @@ export const checkProjectileCollisions = (
     const rotationRad = (projectile.rotation * Math.PI) / 180;
     const velocityX = Math.cos(rotationRad) * projectile.speed * deltaTime;
     const velocityY = Math.sin(rotationRad) * projectile.speed * deltaTime;
+    
+    // Debug logging for projectile movement
+    if (projectile.ownerId === 'player') {
+      console.log(`Player projectile - Rotation: ${projectile.rotation}°, VelX: ${velocityX.toFixed(2)}, VelY: ${velocityY.toFixed(2)}`);
+    }
     
     // Update projectile position using calculated velocity
     const newX = projectile.x + velocityX;
